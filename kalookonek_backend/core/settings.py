@@ -54,7 +54,7 @@ MIDDLEWARE = [
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
 
-ROOT_URLCONF = 'kalookonek_backend.urls'
+ROOT_URLCONF = 'kalookonek_backend.core.urls'
 
 TEMPLATES = [
     {
@@ -71,7 +71,7 @@ TEMPLATES = [
     },
 ]
 
-WSGI_APPLICATION = 'kalookonek_backend.wsgi.application'
+WSGI_APPLICATION = 'kalookonek_backend.core.wsgi.application'
 
 
 # Database
