@@ -38,10 +38,10 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     #local
-    'accounts',
-    'mp',
-    'sysadmin',
-    'user'
+    'kalookonek_backend.accounts',
+    'kalookonek_backend.mp',
+    'kalookonek_backend.sysadmin',
+    'kalookonek_backend.user'
 ]
 
 MIDDLEWARE = [

@@ -3,4 +3,4 @@ from django.apps import AppConfig
 
 class SysAdminConfig(AppConfig):
     default_auto_field = 'django.db.models.BigAutoField'
-    name = 'sysadmin'
+    name = 'kalookonek_backend.sysadmin'
