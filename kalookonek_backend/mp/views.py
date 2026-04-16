@@ -10,7 +10,7 @@ def mp(request):
     if request.method == 'GET':
         pass
         #return HttpResponse("mp profile ok")
-    elif request.method == 'UPDATE':
+    elif request.method == 'PUT':
         pass
         #return HttpResponse("mp profile updated")
 
@@ -33,7 +33,7 @@ def patient_record(request, patient_id):
     if request.method == 'GET':
         pass
         #return HttpResponse("mp patient record ok")
-    elif request.method == 'UPDATE':
+    elif request.method == 'PUT':
         pass
         #return HttpResponse("mp patient record updated")
 

@@ -11,7 +11,7 @@ def user(request):
     if request.method == 'GET':
         pass
         
-    elif request.method == 'UPDATE':
+    elif request.method == 'PUT':
         pass
 
 def health_record(request):

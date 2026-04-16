@@ -8,7 +8,7 @@ def dashboard(request):
 def admin(request):
     if request.method == 'GET':
         pass
-    elif request.method == 'UPDATE':
+    elif request.method == 'PUT':
         pass
 
 def all_users(request):
@@ -17,7 +17,7 @@ def all_users(request):
 def user(request, id):
     if request.method == 'GET':
         pass
-    elif request.method == 'UPDATE':
+    elif request.method == 'PUT':
         pass
     elif request.method == 'DELETE':
         pass
@@ -28,7 +28,7 @@ def announcements(request):
 def announcement(request, id):
     if request.method == 'GET':
         pass
-    elif request.method == 'UPDATE':
+    elif request.method == 'PUT':
         pass
     elif request.method == 'DELETE':
         pass
@@ -44,5 +44,5 @@ def refill_requests(request):
         pass
     elif request.method == 'POST':
         pass
-    elif request.method == 'UPDATE':
+    elif request.method == 'PUT':
         pass
