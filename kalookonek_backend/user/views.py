@@ -1,39 +1,294 @@
-from django.shortcuts import render
-from django.http import HttpResponse 
+import json
+from django.http import JsonResponse
+from django.utils import timezone
+from kalookonek_backend.accounts.auth import supabase_auth_required
+from kalookonek_backend.mp.models import PatientProfile, MedicalRecord
+from kalookonek_backend.sysadmin.models import Announcement, AppointmentRequest, RefillRequest, Medicine
 
-# Create your views here.
 
+@supabase_auth_required
 def dashboard(request):
+    """
+    GET — patient dashboard.
+    Returns upcoming approved appointments, recent medical records, and published announcements.
+    """
     if request.method == 'GET':
-        pass
+        profile = request.user_profile
 
-def user(request):
+        # Try to get the patient's PatientProfile
+        try:
+            patient = PatientProfile.objects.get(user=request.user)
+        except PatientProfile.DoesNotExist:
+            patient = None
+
+        # Upcoming approved appointments
+        upcoming_appointments = []
+        if patient:
+            upcoming_qs = AppointmentRequest.objects.filter(
+                patient=patient,
+                status='APPROVED',
+                requested_date__gte=timezone.now().date(),
+            ).order_by('requested_date')[:5]
+
+            upcoming_appointments = [
+                {
+                    "id": ar.id,
+                    "requested_date": ar.requested_date.isoformat(),
+                    "requested_time": ar.requested_time.isoformat() if ar.requested_time else None,
+                    "reason": ar.reason,
+                    "status": ar.status,
+                }
+                for ar in upcoming_qs
+            ]
+
+        # Recent medical records
+        recent_records = []
+        if patient:
+            records_qs = MedicalRecord.objects.filter(patient=patient).order_by('-visit_date')[:5]
+            recent_records = [
+                {
+                    "id": r.id,
+                    "visit_date": r.visit_date.isoformat(),
+                    "diagnosis": r.diagnosis or "General Checkup",
+                    "status": r.status,
+                }
+                for r in records_qs
+            ]
+
+        # Published announcements
+        announcements_qs = Announcement.objects.filter(is_published=True).order_by('-published_at')[:5]
+        announcements = [
+            {
+                "id": a.id,
+                "title": a.title,
+                "body": a.body,
+                "date": a.published_at.strftime('%Y-%m-%d') if a.published_at else a.created_at.strftime('%Y-%m-%d'),
+            }
+            for a in announcements_qs
+        ]
+
+        return JsonResponse({
+            "display_id": profile.display_id,
+            "name": request.user.get_full_name(),
+            "upcoming_appointments": upcoming_appointments,
+            "recent_records": recent_records,
+            "announcements": announcements,
+        })
+
+    return JsonResponse({"error": "Method not allowed."}, status=405)
+
+
+@supabase_auth_required
+def user_profile(request):
+    """
+    GET — return own profile (UserProfile + PatientProfile if exists).
+    PUT — update allowed profile fields.
+    """
+    profile = request.user_profile
+    user = request.user
+
     if request.method == 'GET':
-        pass
-        
+        data = {
+            "display_id": profile.display_id,
+            "first_name": user.first_name,
+            "last_name": user.last_name,
+            "email": user.email,
+            "role": profile.role,
+            "phone_number": profile.phone_number,
+        }
+
+        # Include PatientProfile data if it exists
+        try:
+            patient = PatientProfile.objects.get(user=user)
+            data["patient_info"] = {
+                "date_of_birth": patient.date_of_birth.isoformat(),
+                "age": patient.age,
+                "sex": patient.sex,
+                "blood_type": patient.blood_type,
+                "address": patient.address,
+                "barangay": patient.barangay,
+                "emergency_contact_name": patient.emergency_contact_name,
+                "emergency_contact_number": patient.emergency_contact_number,
+                "allergies": patient.allergies,
+            }
+        except PatientProfile.DoesNotExist:
+            data["patient_info"] = None
+
+        return JsonResponse(data)
+
     elif request.method == 'PUT':
-        pass
+        data = json.loads(request.body)
 
+        if 'first_name' in data:
+            user.first_name = data['first_name']
+        if 'last_name' in data:
+            user.last_name = data['last_name']
+        if 'phone_number' in data:
+            profile.phone_number = data['phone_number']
+
+        user.save()
+        profile.save()
+
+        return JsonResponse({"message": "Profile updated successfully.", "display_id": profile.display_id})
+
+    return JsonResponse({"error": "Method not allowed."}, status=405)
+
+
+@supabase_auth_required
 def health_record(request):
+    """GET — return the logged-in patient's full medical record history."""
     if request.method == 'GET':
-        pass
+        try:
+            patient = PatientProfile.objects.get(user=request.user)
+        except PatientProfile.DoesNotExist:
+            return JsonResponse({"error": "No patient profile found for this user."}, status=404)
+
+        records = MedicalRecord.objects.filter(patient=patient).order_by('-visit_date')
+
+        record_list = [
+            {
+                "id": r.id,
+                "visit_date": r.visit_date.isoformat(),
+                "attending_staff": r.attending_staff.get_full_name() if r.attending_staff else None,
+                "status": r.status,
+                "blood_pressure": r.blood_pressure,
+                "temperature": str(r.temperature) if r.temperature else None,
+                "weight": str(r.weight) if r.weight else None,
+                "diagnosis": r.diagnosis,
+                "treatment": r.treatment,
+                "prescription": r.prescription,
+                "notes": r.notes,
+                "follow_up_date": r.follow_up_date.isoformat() if r.follow_up_date else None,
+            }
+            for r in records
+        ]
+
+        return JsonResponse({"records": record_list})
+
+    return JsonResponse({"error": "Method not allowed."}, status=405)
+
 
 def qr_code(request):
-    if request.method == 'GET':
-        pass
+    """QR code generation — not yet implemented."""
+    return JsonResponse({"message": "QR code feature not yet implemented."}, status=501)
 
+
+@supabase_auth_required
 def emergency_contacts(request):
-    if request.method == 'GET':
-        pass
+    """
+    GET — return emergency contact info from PatientProfile.
+    PUT — update emergency contact info.
+    """
+    try:
+        patient = PatientProfile.objects.get(user=request.user)
+    except PatientProfile.DoesNotExist:
+        return JsonResponse({"error": "No patient profile found for this user."}, status=404)
 
+    if request.method == 'GET':
+        return JsonResponse({
+            "emergency_contact_name": patient.emergency_contact_name,
+            "emergency_contact_number": patient.emergency_contact_number,
+        })
+
+    elif request.method == 'PUT':
+        data = json.loads(request.body)
+        if 'emergency_contact_name' in data:
+            patient.emergency_contact_name = data['emergency_contact_name']
+        if 'emergency_contact_number' in data:
+            patient.emergency_contact_number = data['emergency_contact_number']
+        patient.save()
+        return JsonResponse({"message": "Emergency contacts updated successfully."})
+
+    return JsonResponse({"error": "Method not allowed."}, status=405)
+
+
+@supabase_auth_required
 def medicine(request):
+    """
+    GET — list all available medicines.
+    POST — create a refill request for the logged-in patient.
+    """
     if request.method == 'GET':
-        pass
-    elif request.method == 'POST':
-        pass
+        medicines = Medicine.objects.all()
+        medicine_list = [
+            {
+                "id": m.id,
+                "name": m.name,
+                "description": m.description,
+                "stock_quantity": m.stock_quantity,
+                "dosage_instructions": m.dosage_instructions,
+            }
+            for m in medicines
+        ]
+        return JsonResponse({"medicines": medicine_list})
 
+    elif request.method == 'POST':
+        try:
+            patient = PatientProfile.objects.get(user=request.user)
+        except PatientProfile.DoesNotExist:
+            return JsonResponse({"error": "No patient profile found for this user."}, status=404)
+
+        data = json.loads(request.body)
+        medicine_id = data.get('medicine_id')
+
+        if not medicine_id:
+            return JsonResponse({"error": "medicine_id is required."}, status=400)
+
+        try:
+            med = Medicine.objects.get(id=medicine_id)
+        except Medicine.DoesNotExist:
+            return JsonResponse({"error": "Medicine not found."}, status=404)
+
+        refill = RefillRequest.objects.create(
+            patient=patient,
+            medicine=med,
+        )
+        return JsonResponse({"message": "Refill request submitted successfully.", "id": refill.id})
+
+    return JsonResponse({"error": "Method not allowed."}, status=405)
+
+
+@supabase_auth_required
 def appointments(request):
-    if request.method == 'GET': # when user views their appointments
-        pass
-    elif request.method == 'POST': # when user requests for an appointment
-        pass
+    """
+    GET — list the logged-in patient's appointment requests.
+    POST — create a new appointment request.
+    """
+    try:
+        patient = PatientProfile.objects.get(user=request.user)
+    except PatientProfile.DoesNotExist:
+        return JsonResponse({"error": "No patient profile found for this user."}, status=404)
+
+    if request.method == 'GET':
+        qs = AppointmentRequest.objects.filter(patient=patient).order_by('-created_at')
+        appointment_list = [
+            {
+                "id": ar.id,
+                "requested_date": ar.requested_date.isoformat(),
+                "requested_time": ar.requested_time.isoformat() if ar.requested_time else None,
+                "reason": ar.reason,
+                "status": ar.status,
+                "created_at": ar.created_at.isoformat(),
+            }
+            for ar in qs
+        ]
+        return JsonResponse({"appointments": appointment_list})
+
+    elif request.method == 'POST':
+        data = json.loads(request.body)
+
+        requested_date = data.get('requested_date')
+        reason = data.get('reason', '')
+
+        if not requested_date:
+            return JsonResponse({"error": "requested_date is required."}, status=400)
+
+        ar = AppointmentRequest.objects.create(
+            patient=patient,
+            requested_date=requested_date,
+            requested_time=data.get('requested_time'),
+            reason=reason,
+        )
+        return JsonResponse({"message": "Appointment request submitted successfully.", "id": ar.id})
+
+    return JsonResponse({"error": "Method not allowed."}, status=405)

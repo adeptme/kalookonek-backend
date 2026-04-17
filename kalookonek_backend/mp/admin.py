@@ -5,7 +5,7 @@ from .models import PatientProfile, MedicalRecord
 class MedicalRecordInline(admin.TabularInline):
     model = MedicalRecord
     extra = 0
-    readonly_fields = ('created_at', 'updated_at')
+    readonly_fields = ('created_at',)
 
 
 @admin.register(PatientProfile)

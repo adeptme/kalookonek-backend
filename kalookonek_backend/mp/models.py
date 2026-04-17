@@ -46,28 +46,30 @@ class PatientProfile(models.Model):
 
 
 class MedicalRecord(models.Model):
-    patient = models.ForeignKey(
-        PatientProfile,
-        on_delete=models.CASCADE,
-        related_name='medical_records'
+    STATUS_CHOICES = (
+        ('SCHEDULED', 'Scheduled'),
+        ('COMPLETED', 'Completed'),
+        ('CANCELLED', 'Cancelled'),
     )
-    attending_staff = models.ForeignKey(
-        User,
-        on_delete=models.SET_NULL,
-        null=True,
-        related_name='handled_records',
-        limit_choices_to={'profile__role__in': ['staff', 'admin']}
-    )
+
+    patient = models.ForeignKey(PatientProfile, on_delete=models.CASCADE, related_name='medical_records')
+    attending_staff = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, related_name='attended_records')
+    
     visit_date = models.DateField()
-    diagnosis = models.TextField()
+    appointment_time = models.TimeField(blank=True, null=True)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='COMPLETED')
+    
+    blood_pressure = models.CharField(max_length=20, blank=True)
+    temperature = models.DecimalField(max_digits=4, decimal_places=1, blank=True, null=True)
+    weight = models.DecimalField(max_digits=5, decimal_places=1, blank=True, null=True)
+    
+    diagnosis = models.TextField(blank=True)
     treatment = models.TextField(blank=True)
+    prescription = models.TextField(blank=True)
     notes = models.TextField(blank=True)
+    
     follow_up_date = models.DateField(blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-
-    class Meta:
-        ordering = ['-visit_date']
 
     def __str__(self):
-        return f"Record for {self.patient} on {self.visit_date}"
+        return f"{self.patient.user.get_full_name()} - {self.visit_date}"

@@ -3,12 +3,14 @@ from django.urls import path
 from . import views
 
 urlpatterns = [
-    path('admin/', views.dashboard, name='dashboard'),
-    path('admin/update/', views.admin, name='admin'),
+    path('admin/dashboard/', views.dashboard, name='admin_dashboard'),
+    path('admin/profile/', views.admin_profile, name='admin_profile'),
     path('admin/users/', views.all_users, name='all_users'),
-    path('admin/users/<int:id>/', views.user, name='user'),
+    path('admin/users/<str:display_id>/', views.user_detail, name='user_detail'),
     path('admin/announcements/', views.announcements, name='announcements'),
-    path('admin/announcements/<int:id>/', views.announcement, name='announcement'),
-    path('admin/appointment-requests/', views.appointment_request, name='appointment_request'),
+    path('admin/announcements/<int:id>/', views.announcement_detail, name='announcement_detail'),
+    path('admin/appointment-requests/', views.appointment_requests, name='appointment_requests'),
+    path('admin/appointment-requests/<int:id>/', views.appointment_request_detail, name='appointment_request_detail'),
     path('admin/refill-requests/', views.refill_requests, name='refill_requests'),
+    path('admin/refill-requests/<int:id>/', views.refill_request_detail, name='refill_request_detail'),
 ]
