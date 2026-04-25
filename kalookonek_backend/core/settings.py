@@ -41,8 +41,8 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
-    'corsheaders'
-    #local
+    'corsheaders',  # <--- ADD THIS
+    # local
     'kalookonek_backend.accounts',
     'kalookonek_backend.mp',
     'kalookonek_backend.sysadmin',
@@ -50,6 +50,7 @@ INSTALLED_APPS = [
 ]
 
 MIDDLEWARE = [
+    'corsheaders.middleware.CorsMiddleware',  # <--- ADD THIS AT THE TOP
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'corsheaders.middleware.CorsMiddleware',
@@ -58,19 +59,6 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
-]
-
-CORS_ALLOW_CREDENTIALS = True
-CORS_ALLOWED_ORIGINS = [
-    os.environ.get('CORS_ALLOWED_ORIGIN')
-]
-
-CORS_ALLOWED_ORIGIN_REGEXES = [
-    os.environ.get('CORS_ALLOWED_ORIGIN'),
-]
-
-CSRF_TRUSTED_ORIGINS = [
-    os.environ.get('CORS_ALLOWED_ORIGIN')
 ]
 
 ROOT_URLCONF = 'kalookonek_backend.core.urls'
