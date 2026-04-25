@@ -1,2 +1,8 @@
 Django
-dotenv
+python-dotenv
+psycopg2-binary
+PyJWT
+cryptography
+supabase
+pillow
+httpx
