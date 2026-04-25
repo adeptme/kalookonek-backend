@@ -39,3 +39,36 @@ class UserProfile(models.Model):
     @property
     def is_staff_member(self):
         return self.role in ('staff', 'admin')
+
+
+class RegistrationRequest(models.Model):
+    """
+    Stores access requests submitted by the frontend 'Request Access' form.
+    An admin reviews these and either approves (triggering a Supabase invite)
+    or rejects them.
+    """
+    STATUS_CHOICES = [
+        ('PENDING', 'Pending'),
+        ('APPROVED', 'Approved'),
+        ('REJECTED', 'Rejected'),
+    ]
+
+    ROLE_CHOICES = [
+        ('staff', 'Staff'),
+        ('admin', 'Admin'),
+    ]
+
+    first_name = models.CharField(max_length=150)
+    last_name = models.CharField(max_length=150)
+    email = models.EmailField()
+    employee_id = models.CharField(max_length=50, blank=True)
+    barangay = models.CharField(max_length=100, blank=True)
+    role_requested = models.CharField(max_length=10, choices=ROLE_CHOICES, default='staff')
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='PENDING')
+    applied_date = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-applied_date']
+
+    def __str__(self):
+        return f"{self.first_name} {self.last_name} — {self.status}"

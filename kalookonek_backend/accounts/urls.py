@@ -11,4 +11,5 @@ urlpatterns = [
     # Active endpoints
     path('accounts/profile/', views.get_profile, name='get_profile'),
     path('accounts/settings/', views.account_settings, name='account_settings'),
+    path('accounts/request-access/', views.request_access, name='request_access'),
 ]

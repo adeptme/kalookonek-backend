@@ -1,12 +1,16 @@
 import json
+import logging
 from django.http import JsonResponse, HttpResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.utils import timezone
+from django.conf import settings
 from django.contrib.auth.models import User
-from kalookonek_backend.accounts.models import UserProfile
+from kalookonek_backend.accounts.models import UserProfile, RegistrationRequest
 from kalookonek_backend.accounts.auth import role_required, supabase_auth_required
 from .models import Announcement, AppointmentRequest, RefillRequest
 from kalookonek_backend.mp.models import PatientProfile
+
+logger = logging.getLogger(__name__)
 
 
 @role_required('admin')
@@ -327,5 +331,132 @@ def refill_request_detail(request, id):
         rr.processed_at = timezone.now()
         rr.save()
         return JsonResponse({"message": f"Refill request {new_status.lower()} successfully."})
+
+    return JsonResponse({"error": "Method not allowed."}, status=405)
+
+
+# ---------------------------------------------------------------------------
+# Registration Request Management
+# ---------------------------------------------------------------------------
+
+@role_required('admin')
+def registration_requests(request):
+    """
+    GET — list all registration requests (optionally filter by status).
+    """
+    if request.method == 'GET':
+        status_filter = request.GET.get('status', None)
+        qs = RegistrationRequest.objects.order_by('-applied_date')
+
+        if status_filter:
+            qs = qs.filter(status=status_filter.upper())
+
+        request_list = [
+            {
+                "id": rr.id,
+                "first_name": rr.first_name,
+                "last_name": rr.last_name,
+                "email": rr.email,
+                "employee_id": rr.employee_id,
+                "barangay": rr.barangay,
+                "role_requested": rr.role_requested,
+                "status": rr.status,
+                "applied_date": rr.applied_date.isoformat(),
+            }
+            for rr in qs
+        ]
+        return JsonResponse({"registration_requests": request_list})
+
+    return JsonResponse({"error": "Method not allowed."}, status=405)
+
+
+@role_required('admin')
+def registration_request_approve(request, id):
+    """
+    PUT — approve a registration request.
+    This triggers the Supabase Admin invite flow:
+      1. Sends an invite email via Supabase (user sets their own password).
+      2. Creates a local Django User + UserProfile.
+      3. Marks the request as APPROVED.
+    """
+    try:
+        reg = RegistrationRequest.objects.get(id=id)
+    except RegistrationRequest.DoesNotExist:
+        return JsonResponse({"error": "Registration request not found."}, status=404)
+
+    if reg.status != 'PENDING':
+        return JsonResponse({"error": f"Request already {reg.status.lower()}."}, status=400)
+
+    if request.method == 'PUT':
+        # --- Step 1: Send Supabase invite ---
+        supabase_uid = None
+        try:
+            from supabase import create_client
+            supabase_url = settings.SUPABASE_URL
+            supabase_key = settings.SUPABASE_SERVICE_ROLE_KEY
+
+            if not supabase_url or not supabase_key:
+                return JsonResponse(
+                    {"error": "Server misconfiguration: SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY not set."},
+                    status=500
+                )
+
+            supabase_client = create_client(supabase_url, supabase_key)
+            invite_response = supabase_client.auth.admin.invite_user_by_email(reg.email)
+
+            supabase_uid = invite_response.user.id
+            logger.info(f"Supabase invite sent to {reg.email}, uid={supabase_uid}")
+
+        except Exception as e:
+            logger.error(f"Supabase invite failed for {reg.email}: {e}")
+            return JsonResponse(
+                {"error": f"Failed to send Supabase invite: {str(e)}"},
+                status=500
+            )
+
+        # --- Step 2: Create local Django User + UserProfile ---
+        user, created = User.objects.get_or_create(
+            username=reg.email,
+            defaults={
+                'email': reg.email,
+                'first_name': reg.first_name,
+                'last_name': reg.last_name,
+            }
+        )
+
+        profile, _ = UserProfile.objects.get_or_create(user=user)
+        profile.role = reg.role_requested
+        profile.supabase_uid = supabase_uid
+        profile.save()
+
+        # --- Step 3: Mark request as approved ---
+        reg.status = 'APPROVED'
+        reg.save()
+
+        return JsonResponse({
+            "message": f"Request approved. An invite email has been sent to {reg.email}.",
+            "display_id": profile.display_id,
+        })
+
+    return JsonResponse({"error": "Method not allowed."}, status=405)
+
+
+@role_required('admin')
+def registration_request_reject(request, id):
+    """
+    PUT — reject a registration request.
+    """
+    try:
+        reg = RegistrationRequest.objects.get(id=id)
+    except RegistrationRequest.DoesNotExist:
+        return JsonResponse({"error": "Registration request not found."}, status=404)
+
+    if reg.status != 'PENDING':
+        return JsonResponse({"error": f"Request already {reg.status.lower()}."}, status=400)
+
+    if request.method == 'PUT':
+        reg.status = 'REJECTED'
+        reg.save()
+        return JsonResponse({"message": "Registration request rejected."})
 
     return JsonResponse({"error": "Method not allowed."}, status=405)

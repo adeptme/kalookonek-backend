@@ -15,6 +15,8 @@ from dotenv import load_dotenv
 load_dotenv()
 
 SUPABASE_JWT_SECRET = os.environ.get('SUPABASE_JWT_SECRET')
+SUPABASE_URL = os.environ.get('SUPABASE_URL')
+SUPABASE_SERVICE_ROLE_KEY = os.environ.get('SUPABASE_SERVICE_ROLE_KEY')
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
