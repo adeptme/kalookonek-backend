@@ -6,3 +6,4 @@ cryptography
 supabase
 pillow
 httpx
+django-cors-headers

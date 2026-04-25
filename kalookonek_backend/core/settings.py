@@ -60,8 +60,13 @@ MIDDLEWARE = [
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
 
+CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOWED_ORIGINS = [
     os.environ.get('CORS_ALLOWED_ORIGIN')
+]
+
+CORS_ALLOWED_ORIGIN_REGEXES = [
+    os.environ.get('CORS_ALLOWED_ORIGIN'),
 ]
 
 CSRF_TRUSTED_ORIGINS = [
