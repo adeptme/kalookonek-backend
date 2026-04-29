@@ -1,6 +1,6 @@
 from django.http import JsonResponse
 from .auth import supabase_auth_required
-from ..user.models import UserProfile
+from .models import UserProfile
 
 # ---------------------------------------------------------------------------
 # NOTE: login, create_account, and reset_password are intentionally commented
@@ -30,26 +30,29 @@ def get_profile(request):
     Returns the user's profile PLUS dashboard statistics and pending applicants.
     """
     profile = request.user_profile
-    
+
     # 1. Fetch Stats for the Dashboard Cards
     # Note: Replace 'SeniorProfile' with your actual model name for seniors
     stats = {
-        'seniors': 12450, # Replace with: SeniorProfile.objects.count()
+        'seniors': 12450,  # Replace with: SeniorProfile.objects.count()
         'pending': UserProfile.objects.filter(role='staff', is_approved=False).count(),
-        'appointments': 18, # Replace with: Appointment.objects.filter(date=today).count()
+        # Replace with: Appointment.objects.filter(date=today).count()
+        'appointments': 18,
     }
 
     # 2. Fetch Pending Applicants for the "Needs Approval" Table
     # We only want users who are NOT yet approved
-    pending_users = UserProfile.objects.filter(is_approved=False).order_by('-created_at')[:5]
-    
+    pending_users = UserProfile.objects.filter(
+        is_approved=False).order_by('-created_at')[:5]
+
     applicants_list = []
     for p in pending_users:
         applicants_list.append({
             'id': p.id,
             'full_name': f"{p.user.first_name} {p.user.last_name}",
             'employee_id': p.display_id,
-            'barangay': getattr(p, 'barangay', 'N/A'), # Uses N/A if barangay field doesn't exist
+            # Uses N/A if barangay field doesn't exist
+            'barangay': getattr(p, 'barangay', 'N/A'),
             'created_at': p.created_at.isoformat(),
         })
 

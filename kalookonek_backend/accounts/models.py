@@ -10,10 +10,13 @@ class UserProfile(models.Model):
         ('admin', 'Admin'),
     ]
 
-    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='profile')
-    role = models.CharField(max_length=10, choices=ROLE_CHOICES, default='patient')
+    user = models.OneToOneField(
+        User, on_delete=models.CASCADE, related_name='profile')
+    role = models.CharField(
+        max_length=10, choices=ROLE_CHOICES, default='patient')
     phone_number = models.CharField(max_length=20, blank=True)
-    profile_picture = models.ImageField(upload_to='profile_pictures/', blank=True, null=True)
+    profile_picture = models.ImageField(
+        upload_to='profile_pictures/', blank=True, null=True)
 
     # Internal field: links this profile to the Supabase Auth user (never exposed to frontend)
     supabase_uid = models.UUIDField(unique=True, null=True, blank=True)
@@ -29,7 +32,8 @@ class UserProfile(models.Model):
         # Auto-generate display_id if not already set
         if not self.display_id:
             year = timezone.now().year
-            count = UserProfile.objects.filter(created_at__year=year).count() + 1
+            count = UserProfile.objects.filter(
+                created_at__year=year).count() + 1
             self.display_id = f"{year}-{count:03d}"
         super().save(*args, **kwargs)
 
