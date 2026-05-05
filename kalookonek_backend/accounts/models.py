@@ -65,3 +65,22 @@ class UserProfile(models.Model):
     @property
     def is_staff_member(self):
         return self.role in ('staff', 'admin')
+
+
+class Appointment(models.Model):
+    STATUS_CHOICES = [
+        ('SCHEDULED', 'Scheduled'),
+        ('CURRENT', 'Current'),
+        ('COMPLETED', 'Completed'),
+    ]
+
+    patient_name = models.CharField(max_length=255)
+    patient_id_display = models.CharField(max_length=50)  # e.g., 2024-088
+    details = models.TextField()  # e.g., Blood Pressure Monitoring
+    start_time = models.DateTimeField()
+    end_time = models.DateTimeField()
+    status = models.CharField(
+        max_length=20, choices=STATUS_CHOICES, default='SCHEDULED')
+
+    def __str__(self):
+        return f"{self.patient_name} - {self.start_time.strftime('%I:%M %p')}"

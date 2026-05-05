@@ -1,27 +1,56 @@
-import json
-from django.http import JsonResponse
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import IsAuthenticated, AllowAny
+from rest_framework.response import Response
+from rest_framework.authtoken.models import Token
+from django.shortcuts import get_object_or_404
 from django.db.models import Q
-from django.views.decorators.csrf import csrf_exempt
-from .auth import supabase_auth_required
-from .models import UserProfile
+from django.contrib.auth import authenticate
+from .models import UserProfile, Appointment
 
 # ---------------------------------------------------------------------------
-# CORE DASHBOARD VIEWS
+# AUTHENTICATION
 # ---------------------------------------------------------------------------
 
 
-@supabase_auth_required
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def login(request):
+    """
+    Handles DRF Token Authentication login.
+    Satisfies the 'login' attribute requirement in urls.py.
+    """
+    username = request.data.get('username')
+    password = request.data.get('password')
+
+    user = authenticate(username=username, password=password)
+
+    if user:
+        token, created = Token.objects.get_or_create(user=user)
+        profile = get_object_or_404(UserProfile, user=user)
+        return Response({
+            'token': token.key,
+            'role': profile.role,
+            'user_id': user.id,
+            'display_id': profile.display_id
+        })
+    else:
+        return Response({'error': 'Invalid Credentials'}, status=401)
+
+# ---------------------------------------------------------------------------
+# PROFILE & DASHBOARD STATS
+# ---------------------------------------------------------------------------
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
 def get_profile(request):
-    """
-    GET /accounts/profile/
-    Returns the user's profile, dashboard statistics, and pending staff applicants.
-    """
-    profile = request.user_profile
+    profile = get_object_or_404(UserProfile, user=request.user)
 
     stats = {
-        'seniors': UserProfile.objects.filter(role='patient').count(),
+        # Count only patients aged 60 or older
+        'seniors': UserProfile.objects.filter(role='patient', age__gte=60).count(),
         'pending': UserProfile.objects.filter(role='staff', is_approved=False).count(),
-        'appointments': 18,
+        'appointments': Appointment.objects.count(),
     }
 
     pending_users = UserProfile.objects.filter(
@@ -37,11 +66,11 @@ def get_profile(request):
             'created_at': p.created_at.isoformat(),
         })
 
-    return JsonResponse({
+    return Response({
         'user': {
             'display_id': profile.display_id,
             'email': request.user.email,
-            'full_name': request.user.get_full_name() or "Raphael Espiritu",
+            'full_name': request.user.get_full_name() or request.user.username,
             'role': profile.role,
             'profile_picture': profile.profile_picture.url if profile.profile_picture else None,
         },
@@ -50,17 +79,53 @@ def get_profile(request):
     })
 
 # ---------------------------------------------------------------------------
-# PATIENT MANAGEMENT VIEWS
+# PATIENT MANAGEMENT
 # ---------------------------------------------------------------------------
 
 
-@supabase_auth_required
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_all_patients(request):
+    search_query = request.query_params.get('search', '').strip()
+    barangay_filter = request.query_params.get('barangay', '').strip()
+    status_filter = request.query_params.get('status', '').strip()
+
+    patients_qs = UserProfile.objects.filter(role='patient')
+
+    if search_query:
+        patients_qs = patients_qs.filter(
+            Q(display_id__icontains=search_query) |
+            Q(user__first_name__icontains=search_query) |
+            Q(user__last_name__icontains=search_query)
+        )
+
+    if barangay_filter and barangay_filter != "All Barangays":
+        patients_qs = patients_qs.filter(barangay=barangay_filter)
+
+    if status_filter == "COMPLETED":
+        patients_qs = patients_qs.filter(updated_at__isnull=False)
+    elif status_filter == "PENDING":
+        patients_qs = patients_qs.filter(updated_at__isnull=True)
+
+    patients_list = []
+    for p in patients_qs.order_by('user__last_name'):
+        patients_list.append({
+            'id': p.display_id,
+            'name': f"{p.user.first_name} {p.user.last_name}",
+            'age': getattr(p, 'age', 'N/A'),
+            'gender': getattr(p, 'gender', 'N/A'),
+            'barangay': getattr(p, 'barangay', 'Brgy. Unset'),
+            'last_visit': p.updated_at.strftime('%b %d, %Y') if p.updated_at else 'No visits yet',
+            'status': 'COMPLETED' if p.updated_at else 'PENDING'
+        })
+
+    return Response(patients_list)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
 def get_recent_patients(request):
-    """
-    GET /accounts/patients/?search=query
-    Fetches the 10 most recent patients for the Dashboard table.
-    """
-    search_query = request.GET.get('search', '').strip()
+    search_query = request.query_params.get('search', '').strip()
     patients_qs = UserProfile.objects.filter(role='patient')
 
     if search_query:
@@ -84,93 +149,51 @@ def get_recent_patients(request):
             'status': 'COMPLETED' if p.updated_at else 'PENDING'
         })
 
-    return JsonResponse(patients_list, safe=False)
-
-
-@supabase_auth_required
-def get_all_patients(request):
-    """
-    GET /accounts/directory/?search=...&barangay=...&status=...
-    Fetches all patients with support for Search, Barangay, and Status filters 
-    specifically for the Patient Directory page.
-    """
-    # 1. Capture filter parameters from the frontend request
-    search_query = request.GET.get('search', '').strip()
-    barangay_filter = request.GET.get('barangay', '').strip()
-    status_filter = request.GET.get('status', '').strip()
-
-    # 2. Start with all patients
-    patients_qs = UserProfile.objects.filter(role='patient')
-
-    # 3. Apply Search (Name or ID)
-    if search_query:
-        patients_qs = patients_qs.filter(
-            Q(display_id__icontains=search_query) |
-            Q(user__first_name__icontains=search_query) |
-            Q(user__last_name__icontains=search_query)
-        )
-
-    # 4. Apply Barangay Filter
-    if barangay_filter and barangay_filter != "All Barangays":
-        patients_qs = patients_qs.filter(barangay=barangay_filter)
-
-    # 5. Apply Status Filter
-    if status_filter == "COMPLETED":
-        patients_qs = patients_qs.filter(updated_at__isnull=False)
-    elif status_filter == "PENDING":
-        patients_qs = patients_qs.filter(updated_at__isnull=True)
-
-    # 6. Format response to match the Patient Directory UI (Screenshot (3426).png)
-    patients_list = []
-    for p in patients_qs.order_by('user__last_name'):
-        patients_list.append({
-            'id': p.display_id,
-            'name': f"{p.user.first_name} {p.user.last_name}",
-            'age': getattr(p, 'age', 'N/A'),
-            'gender': getattr(p, 'gender', 'N/A'),
-            'barangay': getattr(p, 'barangay', 'Brgy. Unset'),
-            'last_visit': p.updated_at.strftime('%b %d, %Y') if p.updated_at else 'No visits yet',
-            'status': 'COMPLETED' if p.updated_at else 'PENDING'
-        })
-
-    return JsonResponse(patients_list, safe=False)
+    return Response(patients_list)
 
 # ---------------------------------------------------------------------------
-# SETTINGS & AUTH STUBS
+# SETTINGS
 # ---------------------------------------------------------------------------
 
 
-@supabase_auth_required
+@api_view(['PUT'])
+@permission_classes([IsAuthenticated])
 def account_settings(request):
-    if request.method == 'PUT':
-        try:
-            data = json.loads(request.body)
-        except json.JSONDecodeError:
-            return JsonResponse({'error': 'Invalid JSON.'}, status=400)
+    data = request.data
+    user = request.user
+    profile = get_object_or_404(UserProfile, user=user)
 
-        profile = request.user_profile
-        user = request.user
+    if 'first_name' in data:
+        user.first_name = data['first_name']
+    if 'last_name' in data:
+        user.last_name = data['last_name']
+    if 'phone_number' in data:
+        profile.phone_number = data['phone_number']
 
-        if 'first_name' in data:
-            user.first_name = data['first_name']
-        if 'last_name' in data:
-            user.last_name = data['last_name']
-        if 'phone_number' in data:
-            profile.phone_number = data['phone_number']
+    user.save()
+    profile.save()
 
-        user.save()
-        profile.save()
+    return Response({
+        'message': 'Profile updated successfully.',
+        'display_id': profile.display_id
+    })
 
-        return JsonResponse({
-            'message': 'Profile updated successfully.',
-            'display_id': profile.display_id
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_appointments(request):
+    # For now, let's just get all appointments
+    appointments = Appointment.objects.all().order_by('start_time')
+
+    data = []
+    for appt in appointments:
+        data.append({
+            'id': appt.id,
+            'patient_name': appt.patient_name,
+            'display_id': appt.patient_id_display,
+            'time': appt.start_time.strftime('%I:%M %p'),
+            'end_time': appt.end_time.strftime('%I:%M %p'),
+            'purpose': appt.details,
+            'status': appt.status
         })
-
-    return JsonResponse({'error': 'Method not allowed.'}, status=405)
-
-
-@csrf_exempt
-def login(request):
-    if request.method == 'POST':
-        return JsonResponse({"status": "success"}, status=200)
-    return JsonResponse({"error": "Method not allowed"}, status=405)
+    return Response(data)
