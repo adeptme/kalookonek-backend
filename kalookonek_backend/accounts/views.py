@@ -9,29 +9,13 @@ from .models import UserProfile
 
 logger = logging.getLogger(__name__)
 
-# ---------------------------------------------------------------------------
-# login and reset_password are handled client-side via Supabase Auth.
-# create_account is now activated below to proxy signups through Django.
-# ---------------------------------------------------------------------------
-
-# def login(request):
-#     if request.method == 'POST':
-#         pass
-
-# def reset_password(request):
-#     if request.method == 'POST':
-#         pass
 
 
 @csrf_exempt
 def create_account(request):
     """
     POST /accounts/create/
-    Public endpoint for PATIENT registration.
-    The frontend sends email + password + name here instead of calling
-    supabase.auth.signUp() directly. Django securely creates the Supabase
-    Auth user and the local UserProfile with is_approved=True (patients
-    do not require admin approval).
+
     """
     if request.method == 'POST':
         try:
@@ -98,9 +82,7 @@ def create_account(request):
 def request_access(request):
     """
     POST /accounts/request-access/
-    Public endpoint for STAFF / ADMIN registration requests.
-    No password is collected — the applicant provides their info and waits
-    for admin approval. Upon approval the admin triggers a Supabase invite.
+
     """
     if request.method == 'POST':
         try:
