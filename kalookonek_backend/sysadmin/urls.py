@@ -13,4 +13,9 @@ urlpatterns = [
     path('admin/appointment-requests/<int:id>/', views.appointment_request_detail, name='appointment_request_detail'),
     path('admin/refill-requests/', views.refill_requests, name='refill_requests'),
     path('admin/refill-requests/<int:id>/', views.refill_request_detail, name='refill_request_detail'),
+
+    # Registration request management
+    path('admin/registration-requests/', views.registration_requests, name='registration_requests'),
+    path('admin/registration-requests/<int:id>/approve/', views.registration_request_approve, name='registration_request_approve'),
+    path('admin/registration-requests/<int:id>/reject/', views.registration_request_reject, name='registration_request_reject'),
 ]
