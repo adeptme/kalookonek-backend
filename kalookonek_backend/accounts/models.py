@@ -13,6 +13,7 @@ class UserProfile(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='profile')
     role = models.CharField(max_length=10, choices=ROLE_CHOICES, default='patient')
     phone_number = models.CharField(max_length=20, blank=True)
+    is_approved = models.BooleanField(default=False)
     profile_picture = models.ImageField(upload_to='profile_pictures/', blank=True, null=True)
 
     # Internal field: links this profile to the Supabase Auth user (never exposed to frontend)

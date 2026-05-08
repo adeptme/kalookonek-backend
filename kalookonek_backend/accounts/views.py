@@ -1,6 +1,6 @@
 from django.http import JsonResponse
 from .auth import supabase_auth_required
-from ..user.models import UserProfile
+from .models import UserProfile
 
 # ---------------------------------------------------------------------------
 # NOTE: login, create_account, and reset_password are intentionally commented
