@@ -1,4 +1,5 @@
 import json
+import logging
 from django.http import JsonResponse, HttpResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.utils import timezone
@@ -7,6 +8,8 @@ from kalookonek_backend.accounts.models import UserProfile
 from kalookonek_backend.accounts.auth import role_required, supabase_auth_required
 from .models import Announcement, AppointmentRequest, RefillRequest
 from kalookonek_backend.mp.models import PatientProfile
+
+logger = logging.getLogger(__name__)
 
 
 @role_required('admin')
@@ -327,5 +330,110 @@ def refill_request_detail(request, id):
         rr.processed_at = timezone.now()
         rr.save()
         return JsonResponse({"message": f"Refill request {new_status.lower()} successfully."})
+
+    return JsonResponse({"error": "Method not allowed."}, status=405)
+
+
+# ---------------------------------------------------------------------------
+# Registration Request Management (uses UserProfile.is_approved)
+# ---------------------------------------------------------------------------
+
+@role_required('admin')
+def registration_requests(request):
+    """
+    GET — list all pending registration requests (unapproved UserProfiles).
+    Optionally filter: ?status=pending or ?status=approved
+    """
+    if request.method == 'GET':
+        status_filter = request.GET.get('status', '').lower()
+
+        if status_filter == 'approved':
+            qs = UserProfile.objects.filter(is_approved=True)
+        elif status_filter == 'pending' or not status_filter:
+            qs = UserProfile.objects.filter(is_approved=False)
+        else:
+            qs = UserProfile.objects.all()
+
+        qs = qs.select_related('user').order_by('-created_at')
+
+        request_list = [
+            {
+                "id": p.id,
+                "display_id": p.display_id,
+                "first_name": p.user.first_name,
+                "last_name": p.user.last_name,
+                "email": p.user.email,
+                "role": p.role,
+                "is_approved": p.is_approved,
+                "created_at": p.created_at.isoformat(),
+            }
+            for p in qs
+        ]
+        return JsonResponse({"registration_requests": request_list})
+
+    return JsonResponse({"error": "Method not allowed."}, status=405)
+
+
+@role_required('admin')
+def registration_request_approve(request, id):
+    """
+    PUT — approve a registration request.
+    Sends a Supabase invite email so the user can set their password.
+    """
+    try:
+        profile = UserProfile.objects.select_related('user').get(id=id)
+    except UserProfile.DoesNotExist:
+        return JsonResponse({"error": "Registration request not found."}, status=404)
+
+    if profile.is_approved:
+        return JsonResponse({"error": "This user is already approved."}, status=400)
+
+    if request.method == 'PUT':
+        # --- Step 1: Send Supabase invite ---
+        try:
+            from supabase import create_client
+            supabase_client = create_client(settings.SUPABASE_URL, settings.SUPABASE_SERVICE_ROLE_KEY)
+            invite_response = supabase_client.auth.admin.invite_user_by_email(profile.user.email)
+
+            supabase_uid = invite_response.user.id
+            profile.supabase_uid = supabase_uid
+            logger.info(f"Supabase invite sent to {profile.user.email}, uid={supabase_uid}")
+        except Exception as e:
+            logger.error(f"Supabase invite failed for {profile.user.email}: {e}")
+            return JsonResponse(
+                {"error": f"Failed to send Supabase invite: {str(e)}"},
+                status=500
+            )
+
+        # --- Step 2: Mark as approved ---
+        profile.is_approved = True
+        profile.save()
+
+        return JsonResponse({
+            "message": f"Request approved. An invite email has been sent to {profile.user.email}.",
+            "display_id": profile.display_id,
+        })
+
+    return JsonResponse({"error": "Method not allowed."}, status=405)
+
+
+@role_required('admin')
+def registration_request_reject(request, id):
+    """
+    PUT — reject a registration request.
+    Deletes the unapproved UserProfile and Django User.
+    """
+    try:
+        profile = UserProfile.objects.select_related('user').get(id=id)
+    except UserProfile.DoesNotExist:
+        return JsonResponse({"error": "Registration request not found."}, status=404)
+
+    if profile.is_approved:
+        return JsonResponse({"error": "Cannot reject an already approved user."}, status=400)
+
+    if request.method == 'PUT':
+        email = profile.user.email
+        profile.user.delete()  # Cascades to delete the UserProfile too
+        return JsonResponse({"message": f"Registration request for {email} rejected and removed."})
 
     return JsonResponse({"error": "Method not allowed."}, status=405)
