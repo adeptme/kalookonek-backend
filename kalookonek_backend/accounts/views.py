@@ -28,7 +28,17 @@ def create_account(request):
         password = data.get('password', '').strip()
         first_name = data.get('first_name', '').strip()
         last_name = data.get('last_name', '').strip()
+        gender = data.get('gender', '').strip() or None
+        age_raw = data.get('age', None)
         dob_raw = data.get('dob', '').strip()  # Expected format: MM/DD/YYYY
+
+        # Parse age if provided
+        age = None
+        if age_raw is not None:
+            try:
+                age = int(age_raw)
+            except (ValueError, TypeError):
+                return JsonResponse({'error': 'age must be a number.'}, status=400)
 
         # Parse DOB if provided
         dob = None
@@ -80,6 +90,8 @@ def create_account(request):
                 supabase_uid=supabase_uid,
                 is_approved=True,  # Patients are auto-approved
                 dob=dob,
+                gender=gender,
+                age=age,
             )
         except Exception as db_err:
             # Roll back the Supabase user we just created so nothing is orphaned
