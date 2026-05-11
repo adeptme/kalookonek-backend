@@ -30,9 +30,10 @@ def create_account(request):
         last_name = data.get('last_name', '').strip()
         gender = data.get('gender', '').strip() or None
         age_raw = data.get('age', None)
-        dob_raw = data.get('dob', '').strip()  # Expected format: MM/DD/YYYY
+        dob_raw = data.get('dob', '').strip()
+        barangay = data.get('barangay', '').strip() or None
+        phone_number = data.get('phone_number', '').strip()[:11]
 
-        # Parse age if provided
         age = None
         if age_raw is not None:
             try:
@@ -40,7 +41,6 @@ def create_account(request):
             except (ValueError, TypeError):
                 return JsonResponse({'error': 'age must be a number.'}, status=400)
 
-        # Parse DOB if provided
         dob = None
         if dob_raw:
             try:
@@ -53,6 +53,14 @@ def create_account(request):
 
         if len(password) < 6:
             return JsonResponse({'error': 'Password must be at least 6 characters.'}, status=400)
+
+        if phone_number:
+            if not phone_number.isdigit():
+                return JsonResponse({'error': 'phone_number must contain only digits.'}, status=400)
+            if not phone_number.startswith('09'):
+                return JsonResponse({'error': 'phone_number must start with 09.'}, status=400)
+            if len(phone_number) != 11:
+                return JsonResponse({'error': 'phone_number must be exactly 11 digits.'}, status=400)
 
         # Check for existing user
         if User.objects.filter(email=email).exists():
@@ -92,6 +100,8 @@ def create_account(request):
                 dob=dob,
                 gender=gender,
                 age=age,
+                barangay=barangay,
+                phone_number=phone_number,
             )
         except Exception as db_err:
             # Roll back the Supabase user we just created so nothing is orphaned
