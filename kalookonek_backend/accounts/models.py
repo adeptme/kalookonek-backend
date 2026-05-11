@@ -16,6 +16,11 @@ class UserProfile(models.Model):
     is_approved = models.BooleanField(default=False)
     profile_picture = models.ImageField(upload_to='profile_pictures/', blank=True, null=True)
 
+    # Extended demographic fields — pre-existing in the DB schema, now formally declared
+    barangay = models.CharField(max_length=100, blank=True, null=True)
+    gender = models.CharField(max_length=20, blank=True, null=True)
+    age = models.IntegerField(blank=True, null=True)
+
     # Internal field: links this profile to the Supabase Auth user (never exposed to frontend)
     supabase_uid = models.UUIDField(unique=True, null=True, blank=True)
 

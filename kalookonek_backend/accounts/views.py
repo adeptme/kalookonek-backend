@@ -57,18 +57,28 @@ def create_account(request):
             return JsonResponse({'error': f'Failed to create account: {str(e)}'}, status=500)
 
         # --- Step 2: Create Django User + UserProfile ---
-        django_user = User.objects.create_user(
-            username=email,
-            email=email,
-            first_name=first_name,
-            last_name=last_name,
-        )
-        profile = UserProfile.objects.create(
-            user=django_user,
-            role='patient',
-            supabase_uid=supabase_uid,
-            is_approved=True,  # Patients are auto-approved
-        )
+        try:
+            django_user = User.objects.create_user(
+                username=email,
+                email=email,
+                first_name=first_name,
+                last_name=last_name,
+            )
+            profile = UserProfile.objects.create(
+                user=django_user,
+                role='patient',
+                supabase_uid=supabase_uid,
+                is_approved=True,  # Patients are auto-approved
+            )
+        except Exception as db_err:
+            # Roll back the Supabase user we just created so nothing is orphaned
+            try:
+                supabase_client.auth.admin.delete_user(supabase_uid)
+                logger.warning(f"Rolled back Supabase user {supabase_uid} after Django DB failure.")
+            except Exception:
+                pass
+            logger.error(f"Django DB error while creating account for {email}: {db_err}")
+            return JsonResponse({'error': f'Account creation failed: {str(db_err)}'}, status=500)
 
         return JsonResponse({
             'message': 'Account created successfully.',
@@ -106,17 +116,21 @@ def request_access(request):
             return JsonResponse({'error': 'An account with this email already exists.'}, status=409)
 
         # Create a Django User + unapproved UserProfile (no Supabase account yet)
-        django_user = User.objects.create_user(
-            username=email,
-            email=email,
-            first_name=first_name,
-            last_name=last_name,
-        )
-        profile = UserProfile.objects.create(
-            user=django_user,
-            role=role_requested if role_requested in ('staff', 'admin') else 'staff',
-            is_approved=False,  # Awaiting admin approval
-        )
+        try:
+            django_user = User.objects.create_user(
+                username=email,
+                email=email,
+                first_name=first_name,
+                last_name=last_name,
+            )
+            profile = UserProfile.objects.create(
+                user=django_user,
+                role=role_requested if role_requested in ('staff', 'admin') else 'staff',
+                is_approved=False,  # Awaiting admin approval
+            )
+        except Exception as db_err:
+            logger.error(f"Django DB error while creating access request for {email}: {db_err}")
+            return JsonResponse({'error': f'Access request failed: {str(db_err)}'}, status=500)
 
         return JsonResponse({
             'message': 'Access request submitted successfully. You will be notified once approved.',
