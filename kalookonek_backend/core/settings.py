@@ -43,8 +43,8 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
-    'corsheaders',  # <--- ADD THIS
-    # local
+    'corsheaders', 
+    'rest_framework',
     'kalookonek_backend.accounts',
     'kalookonek_backend.mp',
     'kalookonek_backend.sysadmin',
@@ -156,3 +156,25 @@ MEDIA_ROOT = BASE_DIR / 'media'
 
 # Default primary key field type
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+REST_FRAMEWORK = {
+    'DEFAULT_AUTHENTICATION_CLASSES': (
+        'rest_framework_simplejwt.authentication.JWTAuthentication',
+    ),
+    'DEFAULT_PERMISSION_CLASSES': (
+        'rest_framework.permissions.IsAuthenticated',
+    ),
+}
+
+from datetime import timedelta
+
+SIMPLE_JWT = {
+    'SIGNING_KEY': os.environ.get('SUPABASE_JWT_SECRET'),
+    'ALGORITHM': 'HS256',
+    'AUTH_HEADER_TYPES': ('Bearer',),
+    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=60),
+    'USER_ID_FIELD': 'username',
+    'USER_ID_CLAIM': 'sub',
+    'LEEWAY': timedelta(seconds=10),  # ✅ Fix 1: was an int, must be timedelta
+    'JTI_CLAIM': None,                # ✅ Fix 2: Supabase tokens have no jti
+}
