@@ -1,4 +1,5 @@
 import json
+from datetime import datetime
 import logging
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
@@ -27,6 +28,15 @@ def create_account(request):
         password = data.get('password', '').strip()
         first_name = data.get('first_name', '').strip()
         last_name = data.get('last_name', '').strip()
+        dob_raw = data.get('dob', '').strip()  # Expected format: MM/DD/YYYY
+
+        # Parse DOB if provided
+        dob = None
+        if dob_raw:
+            try:
+                dob = datetime.strptime(dob_raw, '%m/%d/%Y').date()
+            except ValueError:
+                return JsonResponse({'error': 'dob must be in MM/DD/YYYY format.'}, status=400)
 
         if not email or not password:
             return JsonResponse({'error': 'email and password are required.'}, status=400)
@@ -69,6 +79,7 @@ def create_account(request):
                 role='patient',
                 supabase_uid=supabase_uid,
                 is_approved=True,  # Patients are auto-approved
+                dob=dob,
             )
         except Exception as db_err:
             # Roll back the Supabase user we just created so nothing is orphaned

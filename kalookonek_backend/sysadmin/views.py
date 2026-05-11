@@ -437,3 +437,93 @@ def registration_request_reject(request, id):
         return JsonResponse({"message": f"Registration request for {email} rejected and removed."})
 
     return JsonResponse({"error": "Method not allowed."}, status=405)
+
+
+
+@csrf_exempt
+@role_required('admin')
+def admin_create_account(request):
+   
+    if request.method == 'POST':
+        try:
+            data = json.loads(request.body)
+        except json.JSONDecodeError:
+            return JsonResponse({'error': 'Invalid JSON.'}, status=400)
+
+        email = data.get('email', '').strip()
+        password = data.get('password', '').strip()
+        first_name = data.get('first_name', '').strip()
+        last_name = data.get('last_name', '').strip()
+        role = data.get('role', '').strip().lower()
+
+        
+        if not email or not password or not first_name or not last_name:
+            return JsonResponse({
+                'error': 'email, password, first_name, and last_name are required.'
+            }, status=400)
+
+        if len(password) < 6:
+            return JsonResponse({'error': 'Password must be at least 6 characters.'}, status=400)
+
+        valid_roles = ('patient', 'staff', 'admin')
+        if role not in valid_roles:
+            return JsonResponse({
+                'error': f"role must be one of: {', '.join(valid_roles)}"
+            }, status=400)
+
+        if User.objects.filter(email=email).exists():
+            return JsonResponse({'error': 'An account with this email already exists.'}, status=409)
+
+        
+        try:
+            from supabase import create_client
+            from django.conf import settings as django_settings
+            supabase_client = create_client(django_settings.SUPABASE_URL, django_settings.SUPABASE_SERVICE_ROLE_KEY)
+            res = supabase_client.auth.admin.create_user({
+                'email': email,
+                'password': password,
+                'email_confirm': True,
+                'user_metadata': {
+                    'full_name': f"{first_name} {last_name}".strip()
+                }
+            })
+            supabase_uid = res.user.id
+            logger.info(f"Admin-created Supabase user for {email}, uid={supabase_uid}")
+        except Exception as e:
+            logger.error(f"Supabase create_user failed for {email}: {e}")
+            return JsonResponse({'error': f'Failed to create Supabase account: {str(e)}'}, status=500)
+
+        
+        try:
+            django_user = User.objects.create_user(
+                username=email,
+                email=email,
+                first_name=first_name,
+                last_name=last_name,
+            )
+            profile = UserProfile.objects.create(
+                user=django_user,
+                role=role,
+                supabase_uid=supabase_uid,
+                is_approved=True,  # Admin-created accounts are auto-approved
+            )
+        except Exception as db_err:
+            
+            try:
+                supabase_client.auth.admin.delete_user(supabase_uid)
+                logger.warning(f"Rolled back Supabase user {supabase_uid} after Django DB failure.")
+            except Exception:
+                pass
+            logger.error(f"Django DB error while admin-creating account for {email}: {db_err}")
+            return JsonResponse({'error': f'Account creation failed: {str(db_err)}'}, status=500)
+
+        logger.info(f"Admin {request.user.email} created {role} account for {email} ({profile.display_id})")
+
+        return JsonResponse({
+            'message': f'{role.capitalize()} account created successfully.',
+            'display_id': profile.display_id,
+            'email': email,
+            'role': role,
+        }, status=201)
+
+    return JsonResponse({'error': 'Method not allowed.'}, status=405)

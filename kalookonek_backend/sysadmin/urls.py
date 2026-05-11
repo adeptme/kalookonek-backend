@@ -6,6 +6,7 @@ urlpatterns = [
     path('admin/dashboard/', views.dashboard, name='admin_dashboard'),
     path('admin/profile/', views.admin_profile, name='admin_profile'),
     path('admin/users/', views.all_users, name='all_users'),
+    path('admin/users/create/', views.admin_create_account, name='admin_create_account'),
     path('admin/users/<str:display_id>/', views.user_detail, name='user_detail'),
     path('admin/announcements/', views.announcements, name='announcements'),
     path('admin/announcements/<int:id>/', views.announcement_detail, name='announcement_detail'),
