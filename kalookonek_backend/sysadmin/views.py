@@ -7,7 +7,7 @@ from django.contrib.auth.models import User
 from kalookonek_backend.accounts.models import UserProfile
 from kalookonek_backend.accounts.auth import role_required, supabase_auth_required
 from .models import Announcement, AppointmentRequest, RefillRequest
-from kalookonek_backend.mp.models import PatientProfile
+from kalookonek_backend.mp.models import PatientProfile, MedicalRecord
 
 logger = logging.getLogger(__name__)
 
@@ -284,6 +284,26 @@ def appointment_request_detail(request, id):
 
         ar.status = new_status
         ar.save()
+
+        # --- THE BRIDGE: Create a MedicalRecord in 'mp' app if approved ---
+        if new_status == 'APPROVED':
+            try:
+                # Check if a scheduled record already exists for this exact request
+                # (Optional safety check to prevent double-creation)
+                MedicalRecord.objects.get_or_create(
+                    patient=ar.patient,
+                    visit_date=ar.requested_date,
+                    appointment_time=ar.requested_time,
+                    defaults={
+                        'status': 'SCHEDULED',
+                        'notes': f"Auto-scheduled from request: {ar.reason}"
+                    }
+                )
+                logger.info(f"Auto-created MedicalRecord for {ar.patient.user.email} on {ar.requested_date}")
+            except Exception as e:
+                logger.error(f"Failed to auto-create MedicalRecord: {e}")
+                # We still return success for the approval itself, but log the error
+        
         return JsonResponse({"message": f"Appointment request {new_status.lower()} successfully."})
 
     return JsonResponse({"error": "Method not allowed."}, status=405)
