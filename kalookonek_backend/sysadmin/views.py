@@ -87,6 +87,10 @@ def all_users(request):
                 "email": p.user.email,
                 "role": p.role,
                 "is_active": p.user.is_active,
+                "age": p.age,
+                "dob": p.dob.strftime('%m/%d/%Y') if p.dob else None,
+                "gender": p.gender,
+                "barangay": p.barangay,
             }
             for p in profiles
         ]
@@ -114,6 +118,10 @@ def user_detail(request, display_id):
             "role": profile.role,
             "phone_number": profile.phone_number,
             "is_active": target_user.is_active,
+            "age": profile.age,
+            "dob": profile.dob.strftime('%m/%d/%Y') if profile.dob else None,
+            "gender": profile.gender,
+            "barangay": profile.barangay,
         })
 
     elif request.method == 'PUT':
@@ -366,6 +374,10 @@ def registration_requests(request):
                 "email": p.user.email,
                 "role": p.role,
                 "is_approved": p.is_approved,
+                "age": p.age,
+                "dob": p.dob.strftime('%m/%d/%Y') if p.dob else None,
+                "gender": p.gender,
+                "barangay": p.barangay,
                 "created_at": p.created_at.isoformat(),
             }
             for p in qs
@@ -390,7 +402,7 @@ def registration_request_approve(request, id):
     if profile.is_approved:
         return JsonResponse({"error": "This user is already approved."}, status=400)
 
-    if request.method == 'PUT':
+    if request.method in ('POST', 'PUT'):
         # --- Step 1: Handle Supabase Auth account ---
         # If they registered via Patient Sign-up, they already have a supabase_uid and password.
         # If they registered via Staff Request Access, they don't have an account yet.
