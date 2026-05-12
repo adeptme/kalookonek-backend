@@ -7,12 +7,10 @@ from django.contrib.auth.models import User
 from kalookonek_backend.accounts.models import UserProfile
 from kalookonek_backend.accounts.auth import role_required, supabase_auth_required
 from .models import Announcement, AppointmentRequest, RefillRequest
-<<<<<<< HEAD
 from kalookonek_backend.mp.models import PatientProfile, MedicalRecord
-=======
 from kalookonek_backend.mp.models import PatientProfile
 from django.conf import settings
->>>>>>> 1cfb0518116efad52377c6d89d9df69bbf9b559b
+
 
 logger = logging.getLogger(__name__)
 

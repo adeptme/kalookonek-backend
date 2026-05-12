@@ -15,7 +15,7 @@ from rest_framework.response import Response
 # Local Imports
 from .auth import supabase_auth_required
 from .models import UserProfile
-from mp.models import MedicalRecord
+from kalookonek_backend.mp.models import MedicalRecord
 
 logger = logging.getLogger(__name__)
 
