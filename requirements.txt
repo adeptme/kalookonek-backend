@@ -7,3 +7,5 @@ supabase
 pillow
 httpx
 django-cors-headers
+djangorestframework
+djangorestframework-simplejwt
