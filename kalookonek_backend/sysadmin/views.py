@@ -389,29 +389,56 @@ def registration_request_approve(request, id):
         return JsonResponse({"error": "This user is already approved."}, status=400)
 
     if request.method == 'PUT':
-        # --- Step 1: Send Supabase invite ---
-        try:
-            from supabase import create_client
-            supabase_client = create_client(settings.SUPABASE_URL, settings.SUPABASE_SERVICE_ROLE_KEY)
-            invite_response = supabase_client.auth.admin.invite_user_by_email(profile.user.email)
+        # --- Step 1: Handle Supabase Auth account ---
+        # If they registered via Patient Sign-up, they already have a supabase_uid and password.
+        # If they registered via Staff Request Access, they don't have an account yet.
+        
+        temp_password = None
+        if not profile.supabase_uid:
+            try:
+                from supabase import create_client
+                supabase_client = create_client(settings.SUPABASE_URL, settings.SUPABASE_SERVICE_ROLE_KEY)
+                
+                # Dynamic temporary password: FirstNameLastName123!
+                first = profile.user.first_name.replace(" ", "").capitalize()
+                last = profile.user.last_name.replace(" ", "").capitalize()
+                temp_password = f"{first}{last}123!"
+                
+                res = supabase_client.auth.admin.create_user({
+                    'email': profile.user.email,
+                    'password': temp_password,
+                    'email_confirm': True,
+                    'user_metadata': {
+                        'full_name': f"{profile.user.first_name} {profile.user.last_name}".strip()
+                    }
+                })
 
-            supabase_uid = invite_response.user.id
-            profile.supabase_uid = supabase_uid
-            logger.info(f"Supabase invite sent to {profile.user.email}, uid={supabase_uid}")
-        except Exception as e:
-            logger.error(f"Supabase invite failed for {profile.user.email}: {e}")
-            return JsonResponse(
-                {"error": f"Failed to send Supabase invite: {str(e)}"},
-                status=500
-            )
+                profile.supabase_uid = res.user.id
+                logger.info(f"Supabase Auth user created for {profile.user.email} during approval, uid={profile.supabase_uid}")
+            except Exception as e:
+                logger.error(f"Supabase create_user failed during approval for {profile.user.email}: {e}")
+                return JsonResponse(
+                    {"error": f"Failed to create Supabase account: {str(e)}"},
+                    status=500
+                )
+        else:
+            logger.info(f"User {profile.user.email} already has Supabase ID {profile.supabase_uid}, skipping creation.")
 
         # --- Step 2: Mark as approved ---
         profile.is_approved = True
         profile.save()
 
+        msg = "Request approved."
+        if temp_password:
+            msg += f" Account created with temporary password: {temp_password}"
+        else:
+            msg += " User can now log in with their chosen password."
+
         return JsonResponse({
-            "message": f"Request approved. An invite email has been sent to {profile.user.email}.",
+            "message": msg,
             "display_id": profile.display_id,
+            "email": profile.user.email,
+            "temporary_password": temp_password
         })
 
     return JsonResponse({"error": "Method not allowed."}, status=405)
