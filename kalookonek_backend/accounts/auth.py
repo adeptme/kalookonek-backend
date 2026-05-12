@@ -104,16 +104,19 @@ def supabase_auth_required(view_func):
 
 
 def role_required(*allowed_roles):
-    
+
     def decorator(view_func):
-        @supabase_auth_required
         @functools.wraps(view_func)
         def wrapper(request, *args, **kwargs):
+            # supabase_auth_required has already run and set request.user_profile
+            if not hasattr(request, 'user_profile'):
+                return JsonResponse({'error': 'Authentication required.'}, status=401)
             if request.user_profile.role not in allowed_roles:
                 return JsonResponse(
                     {'error': 'Forbidden. Insufficient role permissions.'},
                     status=403
                 )
             return view_func(request, *args, **kwargs)
-        return wrapper
+        # Apply supabase_auth_required as the outermost layer so it runs first
+        return supabase_auth_required(wrapper)
     return decorator

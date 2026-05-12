@@ -175,6 +175,6 @@ SIMPLE_JWT = {
     'ACCESS_TOKEN_LIFETIME': timedelta(minutes=60),
     'USER_ID_FIELD': 'username',
     'USER_ID_CLAIM': 'sub',
-    'LEEWAY': timedelta(seconds=10),  # ✅ Fix 1: was an int, must be timedelta
-    'JTI_CLAIM': None,                # ✅ Fix 2: Supabase tokens have no jti
+    'LEEWAY': timedelta(seconds=10), 
+    'JTI_CLAIM': None,                
 }

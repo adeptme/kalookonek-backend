@@ -21,7 +21,7 @@ from django.conf.urls.static import static
 
 urlpatterns = [
     path('admin/', admin.site.urls),
-    path('', include('kalookonek_backend.sysadmin.urls')),
+    path('api/', include('kalookonek_backend.sysadmin.urls')),
     path('', include('kalookonek_backend.accounts.urls')),
     path('', include('kalookonek_backend.user.urls')),
     path('', include('kalookonek_backend.mp.urls')),
