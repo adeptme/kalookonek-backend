@@ -98,6 +98,13 @@ def supabase_auth_required(view_func):
 
         request.user = django_user
         request.user_profile = profile
+
+        # Final safeguard: Block access if the admin hasn't approved the account yet
+        if not profile.is_approved:
+            return JsonResponse({
+                'error': 'Forbidden. Your account is pending approval by an administrator.'
+            }, status=403)
+
         return view_func(request, *args, **kwargs)
 
     return csrf_exempt(wrapper)
