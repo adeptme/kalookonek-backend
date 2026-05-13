@@ -19,6 +19,7 @@ from kalookonek_backend.mp.models import MedicalRecord
 
 # Needed for Staff
 from django.contrib.auth import authenticate
+from django.contrib.auth.models import User
 from rest_framework.authtoken.models import Token
 from rest_framework.permissions import AllowAny
 
@@ -169,14 +170,26 @@ def change_password(request):
 @api_view(['POST'])
 @permission_classes([AllowAny])
 def login_user(request):
-    """POST /accounts/login/ - The missing login endpoint!"""
-    username = request.data.get('username')
+    """POST /accounts/login/ - Upgraded to handle Emails and Usernames"""
+    username_input = request.data.get('username')
     password = request.data.get('password')
     
-    user = authenticate(username=username, password=password)
+    user = None
+    
+    # 1. If they typed an email, find the corresponding Django username first
+    if '@' in username_input:
+        try:
+            user_obj = User.objects.get(email=username_input)
+            user = authenticate(username=user_obj.username, password=password)
+        except User.DoesNotExist:
+            pass
+    else:
+        # 2. Otherwise, authenticate normally
+        user = authenticate(username=username_input, password=password)
     
     if user:
-        token, created = Token.objects.get_or_create(user=user)
+        token, _ = Token.objects.get_or_create(user=user)
+        
         role = 'staff'
         try:
             role = user.userprofile.role
@@ -190,4 +203,4 @@ def login_user(request):
             'full_name': user.get_full_name()
         })
     else:
-        return Response({'error': 'Invalid Staff ID or Password'}, status=400)
+        return Response({'error': 'Invalid Staff ID or Password. Ensure your local Django password is set.'}, status=400)
