@@ -26,3 +26,6 @@ urlpatterns = [
     path('', include('kalookonek_backend.user.urls')),
     path('', include('kalookonek_backend.mp.urls')),
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+
+if settings.DEBUG:
+    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

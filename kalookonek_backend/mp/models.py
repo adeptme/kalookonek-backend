@@ -33,6 +33,11 @@ class PatientProfile(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
+    # --- NOTIFICATION PREFERENCES ---
+    wants_push = models.BooleanField(default=True)
+    wants_sms = models.BooleanField(default=True)
+    wants_email = models.BooleanField(default=False)
+
     def __str__(self):
         return f"Patient: {self.user.get_full_name()}"
 
