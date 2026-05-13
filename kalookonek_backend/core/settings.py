@@ -48,7 +48,8 @@ INSTALLED_APPS = [
     'kalookonek_backend.accounts',
     'kalookonek_backend.mp',
     'kalookonek_backend.sysadmin',
-    'kalookonek_backend.user'
+    'kalookonek_backend.user',
+    'kalookonek_backend.qr',
 ]
 
 MIDDLEWARE = [

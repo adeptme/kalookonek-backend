@@ -25,4 +25,5 @@ urlpatterns = [
     path('', include('kalookonek_backend.accounts.urls')),
     path('', include('kalookonek_backend.user.urls')),
     path('', include('kalookonek_backend.mp.urls')),
+    path('', include('kalookonek_backend.qr.urls'))
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
