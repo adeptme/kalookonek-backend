@@ -88,6 +88,11 @@ def user_profile(request):
     user = request.user
 
     if request.method == 'GET':
+        # 1. Build the full URL for the image so the frontend can display it
+        profile_pic_url = None
+        if profile.profile_picture:
+            profile_pic_url = request.build_absolute_uri(profile.profile_picture.url)
+
         data = {
             "display_id": profile.display_id,
             "first_name": user.first_name,
@@ -95,13 +100,14 @@ def user_profile(request):
             "email": user.email,
             "role": profile.role,
             "phone_number": profile.phone_number,
+            "profile_picture": profile_pic_url, # 2. Send it back to the app/dashboard!
         }
 
         # Include PatientProfile data if it exists
         try:
             patient = PatientProfile.objects.get(user=user)
             data["patient_info"] = {
-                "date_of_birth": patient.date_of_birth.isoformat(),
+                "date_of_birth": patient.date_of_birth.isoformat() if patient.date_of_birth else None,
                 "age": patient.age,
                 "sex": patient.sex,
                 "blood_type": patient.blood_type,
@@ -110,14 +116,31 @@ def user_profile(request):
                 "emergency_contact_name": patient.emergency_contact_name,
                 "emergency_contact_number": patient.emergency_contact_number,
                 "allergies": patient.allergies,
+                #notification
+                "wants_push": getattr(patient, 'wants_push', True),
+                "wants_sms": getattr(patient, 'wants_sms', True),
+                "wants_email": getattr(patient, 'wants_email', False),
             }
         except PatientProfile.DoesNotExist:
             data["patient_info"] = None
 
         return JsonResponse(data)
 
-    elif request.method == 'PUT':
-        data = json.loads(request.body)
+    elif request.method in ['PUT', 'POST']: # <-- Django will now catch the file!
+        if request.content_type and request.content_type.startswith('multipart/form-data'):
+            data = request.POST # Read the text fields
+            
+            # Save the image if one was uploaded
+            if 'profile_picture' in request.FILES:
+                profile.profile_picture = request.FILES['profile_picture']
+                # Note: We don't need 'profile = request.user.userprofile' here because we already 
+                # defined 'profile = request.user_profile' at the top of the function!
+        else:
+            # If no image, handle it as normal JSON text
+            try:
+                data = json.loads(request.body)
+            except json.JSONDecodeError:
+                return JsonResponse({'error': 'Invalid JSON.'}, status=400)
 
         if 'first_name' in data:
             user.first_name = data['first_name']
@@ -126,10 +149,44 @@ def user_profile(request):
         if 'phone_number' in data:
             profile.phone_number = data['phone_number']
 
+        # --- NOTIFICATION PREFERENCES LOGIC START ---
+        if 'patient_info' in data:
+            patient_info_data = data['patient_info']
+            
+            # If Axios/Fetch sent it as a stringified JSON (because of the image upload), parse it
+            if isinstance(patient_info_data, str):
+                import json
+                try:
+                    patient_info_data = json.loads(patient_info_data)
+                except json.JSONDecodeError:
+                    patient_info_data = {}
+            
+            try:
+                patient = PatientProfile.objects.get(user=user)
+                
+                if 'wants_push' in patient_info_data:
+                    patient.wants_push = patient_info_data['wants_push']
+                if 'wants_sms' in patient_info_data:
+                    patient.wants_sms = patient_info_data['wants_sms']
+                if 'wants_email' in patient_info_data:
+                    patient.wants_email = patient_info_data['wants_email']
+                    
+                patient.save()
+            except PatientProfile.DoesNotExist:
+                pass
+        # --- NOTIFICATION PREFERENCES LOGIC END ---
+        
         user.save()
         profile.save()
+        
+        # Build the new URL to return instantly upon saving
+        new_pic_url = request.build_absolute_uri(profile.profile_picture.url) if profile.profile_picture else None
 
-        return JsonResponse({"message": "Profile updated successfully.", "display_id": profile.display_id})
+        return JsonResponse({
+            "message": "Profile updated successfully.", 
+            "display_id": profile.display_id,
+            "profile_picture": new_pic_url
+        })
 
     return JsonResponse({"error": "Method not allowed."}, status=405)
 
