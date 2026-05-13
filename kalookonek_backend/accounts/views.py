@@ -17,6 +17,11 @@ from .auth import supabase_auth_required
 from .models import UserProfile
 from kalookonek_backend.mp.models import MedicalRecord
 
+# Needed for Staff
+from django.contrib.auth import authenticate
+from rest_framework.authtoken.models import Token
+from rest_framework.permissions import AllowAny
+
 logger = logging.getLogger(__name__)
 
 @csrf_exempt
@@ -160,3 +165,29 @@ def change_password(request):
     user.set_password(request.data.get('new_password'))
     user.save()
     return Response({'message': 'Password updated successfully'})
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def login_user(request):
+    """POST /accounts/login/ - The missing login endpoint!"""
+    username = request.data.get('username')
+    password = request.data.get('password')
+    
+    user = authenticate(username=username, password=password)
+    
+    if user:
+        token, created = Token.objects.get_or_create(user=user)
+        role = 'staff'
+        try:
+            role = user.userprofile.role
+        except Exception:
+            pass
+            
+        return Response({
+            'token': token.key,
+            'user_id': user.id,
+            'role': role,
+            'full_name': user.get_full_name()
+        })
+    else:
+        return Response({'error': 'Invalid Staff ID or Password'}, status=400)
