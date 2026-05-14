@@ -9,9 +9,7 @@ from kalookonek_backend.accounts.models import UserProfile
 from kalookonek_backend.accounts.auth import role_required, supabase_auth_required
 from .models import Announcement, AppointmentRequest, RefillRequest
 from kalookonek_backend.mp.models import PatientProfile, MedicalRecord
-from kalookonek_backend.mp.models import PatientProfile
 from django.conf import settings
-
 
 logger = logging.getLogger(__name__)
 
@@ -503,6 +501,19 @@ def registration_request_approve(request, id):
         # --- Step 2: Mark as approved ---
         profile.is_approved = True
         profile.save()
+
+       
+        if profile.role == 'patient':
+            
+            PatientProfile.objects.get_or_create(
+                user=profile.user,
+                defaults={
+                    'date_of_birth': profile.dob or timezone.now().date(),
+                    'sex': profile.gender.lower() if profile.gender else 'other',
+                    'barangay': profile.barangay or '',
+                    'address': profile.barangay or '' # Placeholder
+                }
+            )
 
         msg = "Request approved."
         if temp_password:

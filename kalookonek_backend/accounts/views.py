@@ -76,6 +76,7 @@ def create_account(request):
                 user=django_user, role='patient', supabase_uid=supabase_uid,
                 is_approved=False, dob=dob, gender=gender, barangay=barangay, phone_number=phone_number
             )
+            
             return JsonResponse({'message': 'Registration submitted.', 'display_id': profile.display_id}, status=201)
         except Exception as e:
             return JsonResponse({'error': str(e)}, status=500)
