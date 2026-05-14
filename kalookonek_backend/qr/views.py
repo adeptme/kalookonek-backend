@@ -72,9 +72,7 @@ def qr_code_png_basic(request):
         profile = UserProfile.objects.get(user=user)
     except UserProfile.DoesNotExist:
         return HttpResponse("User profile not found", status=404)
-    print("User profile found:", profile)
     display_id = profile.display_id
-    print("Display ID:", display_id)
     signer = Signer()
     token = signer.sign(display_id)
     scan_url = _build_scan_url(request, "qr_scan_basic", token)
@@ -104,11 +102,11 @@ def qr_scan_basic(request, token):
     signer = Signer()
     try:
         display_id = signer.unsign(token)
+    except SignatureExpired:
+        return HttpResponse("QR code expired", status=410)
     except BadSignature:
         return HttpResponse("Invalid QR code", status=400)
-    print("Display ID from QR:", display_id)
     patient, profile = _get_patient_by_display_id(display_id)
-    print("profile:", profile)
     if not patient:
         return HttpResponse("Patient Record not found or non-existent.", status=404)
 
