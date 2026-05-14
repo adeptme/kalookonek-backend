@@ -10,7 +10,7 @@
 		<main>
 			<h1>Patient Record</h1>
 			<section>
-				<h2>{{ patient_data.name }}</h2>
+				<h2>{{ patient_data.first_name }} {{ patient_data.last_name }}</h2>
 				<table>
 					<tbody>
 						<tr>
@@ -20,6 +20,10 @@
 						<tr>
 							<th>Date of Birth</th>
 							<td>{{ patient_data.date_of_birth|default:"-" }}</td>
+						</tr>
+						<tr>
+							<th>Age</th>
+							<td>{{ patient_data.age|default:"-" }}</td>
 						</tr>
 						<tr>
 							<th>Blood Type</th>

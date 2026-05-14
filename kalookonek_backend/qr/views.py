@@ -1,14 +1,16 @@
 from io import BytesIO
+from urllib.parse import urljoin, urlparse, urlunparse
 
 from django.conf import settings
 from django.core.signing import BadSignature, SignatureExpired, Signer, TimestampSigner
 from django.http import HttpResponse
 from django.shortcuts import render
 from django.urls import reverse
+from django.contrib.auth.models import User
 
 import qrcode
 
-from kalookonek_backend.accounts.auth import role_required
+from kalookonek_backend.accounts.auth import role_required, supabase_auth_required
 from kalookonek_backend.accounts.models import UserProfile
 from kalookonek_backend.mp.models import MedicalRecord, PatientProfile
 
@@ -22,12 +24,13 @@ def _get_patient_by_display_id(display_id):
     except UserProfile.DoesNotExist:
         return None, None
 
-    try:
-        patient = PatientProfile.objects.get(user=profile.user)
-    except PatientProfile.DoesNotExist:
-        return None, None
+    #try:
+    #    patient = PatientProfile.objects.get(user=profile.user)
+    #except PatientProfile.DoesNotExist:
+    #    return None, None
 
-    return patient, profile
+    #return patient, profile
+    return None, profile
 
 
 def _build_qr_png(data):
@@ -46,6 +49,21 @@ def _build_qr_png(data):
     return buffer.getvalue()
 
 
+def _build_scan_url(request, view_name, token):
+    path = reverse(view_name, kwargs={"token": token})
+    base_url = getattr(settings, "QR_BASE_URL", None)
+    if base_url:
+        return urljoin(base_url.rstrip("/") + "/", path.lstrip("/"))
+
+    scan_url = request.build_absolute_uri(path)
+    if getattr(settings, "QR_FORCE_HTTPS", False):
+        parsed = urlparse(scan_url)
+        if parsed.scheme != "https":
+            parsed = parsed._replace(scheme="https")
+            scan_url = urlunparse(parsed)
+    return scan_url
+
+@supabase_auth_required
 @role_required("patient", "Patient")
 def qr_code_png_basic(request):
     
@@ -54,42 +72,29 @@ def qr_code_png_basic(request):
         profile = UserProfile.objects.get(user=user)
     except UserProfile.DoesNotExist:
         return HttpResponse("User profile not found", status=404)
-    
+    print("User profile found:", profile)
     display_id = profile.display_id
-
+    print("Display ID:", display_id)
     signer = Signer()
     token = signer.sign(display_id)
-    scan_url = request.build_absolute_uri(reverse("qr_scan_basic", kwargs={"token": token}))
+    scan_url = _build_scan_url(request, "qr_scan_basic", token)
 
     png_bytes = _build_qr_png(scan_url)
     return HttpResponse(png_bytes, content_type="image/png")
 
 
+@supabase_auth_required
 @role_required("patient", "Patient")
 def qr_code_png_full(request):
-    current_display_id = None
-    if hasattr(request, "user_profile"):
-        current_display_id = request.user_profile.display_id
-    elif getattr(request, "user", None) and request.user.is_authenticated:
-        try:
-            current_display_id = UserProfile.objects.get(user=request.user).display_id
-        except UserProfile.DoesNotExist:
-            current_display_id = None
-
-    display_id = request.GET.get("display_id") or current_display_id
-    if not display_id:
-        return HttpResponse("Authentication required", status=401)
-
-    if current_display_id is None or str(current_display_id) != str(display_id):
-        return HttpResponse("Forbidden", status=403)
-
-    patient, _profile = _get_patient_by_display_id(display_id)
-    if not patient:
-        return HttpResponse("Patient not found", status=404)
+    user = request.user
+    try:
+        current_display_id = UserProfile.objects.get(user=request.user).display_id
+    except UserProfile.DoesNotExist:
+        return HttpResponse("User profile not found", status=404)
 
     signer = TimestampSigner()
-    token = signer.sign(display_id)
-    scan_url = request.build_absolute_uri(reverse("qr_scan_full", kwargs={"token": token}))
+    token = signer.sign(current_display_id)
+    scan_url = _build_scan_url(request, "qr_scan_full", token)
 
     png_bytes = _build_qr_png(scan_url)
     return HttpResponse(png_bytes, content_type="image/png")
@@ -101,22 +106,25 @@ def qr_scan_basic(request, token):
         display_id = signer.unsign(token)
     except BadSignature:
         return HttpResponse("Invalid QR code", status=400)
-
+    print("Display ID from QR:", display_id)
     patient, profile = _get_patient_by_display_id(display_id)
+    print("profile:", profile)
     if not patient:
-        return HttpResponse("Patient not found", status=404)
+        return HttpResponse("Patient Record not found or non-existent.", status=404)
 
     context = {
         "patient_data": {
-            "name": profile.user.get_full_name(),
+            "first_name": profile.user.first_name,
+            "last_name": profile.user.last_name,
+            "age": profile.calculated_age if profile else None,
             "sex": patient.sex,
             "date_of_birth": patient.date_of_birth,
             "blood_type": patient.blood_type,
             "address": patient.address,
-            "barangay": patient.barangay,
-            "emergency_contact_name": patient.emergency_contact_name,
-            "emergency_contact_number": patient.emergency_contact_number,
-            "allergies": patient.allergies,
+            "barangay": getattr(profile, "barangay", "N/A"),
+            "emergency_contact_name": getattr(patient, "emergency_contact_name", "N/A"),
+            "emergency_contact_number": getattr(patient, "emergency_contact_number", "N/A"),
+            "allergies": getattr(patient, "allergies", "N/A"),
         }
     }
 
@@ -134,7 +142,7 @@ def qr_scan_full(request, token):
 
     patient, profile = _get_patient_by_display_id(display_id)
     if not patient:
-        return HttpResponse("Patient not found", status=404)
+        return HttpResponse("Patient Record not found or non-existent.", status=404)
 
     medical_records = MedicalRecord.objects.filter(patient=patient).order_by("-created_at")
 

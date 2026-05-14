@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<title>Patient Record</title>
+		<py-script src="../../views.py"></py-script>
+	</head>
+    <body>
+		<main>
+			<h1>Patient Record</h1>
+			<section>
+				<h2>{{ patient_data.first_name }} {{ patient_data.last_name }}</h2>
+				<table>
+					<tbody>
+						<tr>
+							<th>Sex</th>
+							<td>{{ patient_data.sex|default:"-" }}</td>
+						</tr>
+						<tr>
+							<th>Date of Birth</th>
+							<td>{{ patient_data.date_of_birth|default:"-" }}</td>
+						</tr>
+						<tr>
+							<th>Age</th>
+							<td>{{ patient_data.age|default:"-" }}</td>
+						</tr>
+						<tr>
+							<th>Blood Type</th>
+							<td>{{ patient_data.blood_type|default:"-" }}</td>
+						</tr>
+						<tr>
+							<th>Address</th>
+							<td>{{ patient_data.address|default:"-" }}</td>
+						</tr>
+						<tr>
+							<th>Barangay</th>
+							<td>{{ patient_data.barangay|default:"-" }}</td>
+						</tr>
+						<tr>
+							<th>Emergency Contact</th>
+							<td>
+								{{ patient_data.emergency_contact_name|default:"-" }}
+								{% if patient_data.emergency_contact_number %}
+									({{ patient_data.emergency_contact_number }})
+								{% endif %}
+							</td>
+						</tr>
+						<tr>
+							<th>Allergies</th>
+							<td>{{ patient_data.allergies|default:"-" }}</td>
+						</tr>
+					</tbody>
+				</table>
+			</section>
+            <section>
+                <h2>Medical History</h2>
+                <table>
+                    <tbody>
+                        {% for record in patient_data.medical_history %}
+                        <tr>
+                            <th>{{ record.date }}</th>
+                            <td>{{ record.description }}</td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="2">No medical history available.</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+		</main>
+    </body>
+</html>
