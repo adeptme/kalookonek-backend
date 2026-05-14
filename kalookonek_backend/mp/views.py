@@ -44,6 +44,57 @@ def dashboard(request):
         "recent_records": recent_list
     })
 
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def manual_lookup(request):
+    """GET — search patients by display ID."""
+    query = request.query_params.get('query', '')
+    if not query:
+        return Response({"error": "Query parameter is required."}, status=400)
+
+    try:
+        patient = PatientProfile.objects.select_related('user', 'user__profile').filter(
+            user__profile__display_id=query).first()
+    except Exception as e:
+        return Response({"error": "An error occurred while searching for the patient."}, status=500)
+
+    if not patient:
+        return Response({"error": "Patient not found."}, status=404)
+    
+    return Response({
+        "id": str(patient.id),
+        "name": patient.user.get_full_name(),
+        "display_id": patient.user.profile.display_id,
+        "blood_type": getattr(patient, 'blood_type', None),
+        "age": patient.user.profile.calculated_age if hasattr(patient.user, 'profile') else None,
+        "sex": getattr(patient, 'sex', None),
+        "barangay": getattr(patient, 'barangay', None),
+        "emergency_contact_name": getattr(patient, 'emergency_contact_name', None),
+        "emergency_contact_number": getattr(patient, 'emergency_contact_number', None),
+        "allergies": getattr(patient, 'allergies', None),
+    })
+
+@api_view(['PUT'])
+@permission_classes([IsAuthenticated])
+def update_patient_info(request, patient_id):
+    """PUT — update patient info (for staff/admin)."""
+    try:
+        patient = PatientProfile.objects.select_related('user').get(id=patient_id)
+    except PatientProfile.DoesNotExist:
+        return Response({"error": "Patient not found."}, status=404)
+
+    data = request.data
+    allowed_fields = ['address', 'barangay', 'emergency_contact_name', 'emergency_contact_number', 'allergies']
+    
+    for field in allowed_fields:
+        if field in data:
+            setattr(patient, field, data[field])
+    
+    try:
+        patient.save()
+        return Response({"message": "Patient information updated successfully."})
+    except Exception as e:
+        return Response({"error": "An error occurred while updating patient information."}, status=500)
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])  # This ensures the Token is checked
