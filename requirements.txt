@@ -9,3 +9,4 @@ httpx
 django-cors-headers
 djangorestframework
 djangorestframework-simplejwt
+qrcode

@@ -18,6 +18,9 @@ load_dotenv()
 SUPABASE_JWT_SECRET = os.environ.get('SUPABASE_JWT_SECRET')
 SUPABASE_URL = os.environ.get('SUPABASE_URL')
 SUPABASE_SERVICE_ROLE_KEY = os.environ.get('SUPABASE_SERVICE_ROLE_KEY')
+QR_BASE_URL = os.environ.get('QR_BASE_URL')
+QR_FORCE_HTTPS = os.environ.get('QR_FORCE_HTTPS', '').lower() in ('1', 'true', 'yes')
+QR_FULL_TTL_SECONDS = int(os.environ.get('QR_FULL_TTL_SECONDS', '900'))
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -50,7 +53,8 @@ INSTALLED_APPS = [
     'kalookonek_backend.accounts',
     'kalookonek_backend.mp',
     'kalookonek_backend.sysadmin',
-    'kalookonek_backend.user'
+    'kalookonek_backend.user',
+    'kalookonek_backend.qr',
 ]
 
 MIDDLEWARE = [
