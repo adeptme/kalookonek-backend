@@ -2,6 +2,7 @@ import json
 import logging
 from django.http import JsonResponse, HttpResponse
 from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.csrf import ensure_csrf_cookie
 from django.utils import timezone
 from django.contrib.auth.models import User
 from kalookonek_backend.accounts.models import UserProfile
@@ -152,6 +153,7 @@ def user_detail(request, display_id):
     return JsonResponse({"error": "Method not allowed."}, status=405)
 
 
+@csrf_exempt
 def announcements(request):
     """
     GET — public, returns all announcements.
@@ -159,6 +161,7 @@ def announcements(request):
     """
     if request.method == 'GET':
         announcements_qs = Announcement.objects.select_related('author').all()
+
         announcement_list = [
             {
                 "id": a.id,
@@ -166,10 +169,12 @@ def announcements(request):
                 "body": a.body,
                 "author": a.author.get_full_name() if a.author else "Unknown",
                 "is_published": a.is_published,
-                "date": a.created_at.strftime('%Y-%m-%d'),
+                "published_at": a.published_at.isoformat() if a.published_at else None,
+                "created_at": a.created_at.isoformat(),
             }
             for a in announcements_qs
         ]
+
         return JsonResponse({"announcements": announcement_list})
 
     elif request.method == 'POST':
@@ -181,15 +186,38 @@ def announcements(request):
 @role_required('staff', 'admin')
 def _create_announcement(request):
     """Internal helper — called from announcements() for POST."""
-    data = json.loads(request.body)
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON."}, status=400)
+
+    title = data.get('title', '').strip()
+    body = data.get('body', '').strip()
+    is_published = data.get('is_published', True)
+
+    if not title or not body:
+        return JsonResponse({"error": "Title and body are required."}, status=400)
+
     new_announcement = Announcement.objects.create(
-        title=data.get('title', ''),
-        body=data.get('body', ''),
+        title=title,
+        body=body,
         author=request.user,
-        is_published=data.get('is_published', False),
-        published_at=timezone.now() if data.get('is_published') else None
+        is_published=is_published,
+        published_at=timezone.now() if is_published else None
     )
-    return JsonResponse({"message": "Announcement created successfully.", "id": new_announcement.id})
+
+    return JsonResponse({
+        "message": "Announcement created successfully.",
+        "announcement": {
+            "id": new_announcement.id,
+            "title": new_announcement.title,
+            "body": new_announcement.body,
+            "author": new_announcement.author.get_full_name() if new_announcement.author else "Unknown",
+            "is_published": new_announcement.is_published,
+            "published_at": new_announcement.published_at.isoformat() if new_announcement.published_at else None,
+            "created_at": new_announcement.created_at.isoformat(),
+        }
+    }, status=201)
 
 
 def announcement_detail(request, id):
@@ -417,6 +445,7 @@ def registration_requests(request):
     return JsonResponse({"error": "Method not allowed."}, status=405)
 
 
+@csrf_exempt
 @role_required('admin')
 def registration_request_approve(request, id):
     """
@@ -491,6 +520,7 @@ def registration_request_approve(request, id):
     return JsonResponse({"error": "Method not allowed."}, status=405)
 
 
+@csrf_exempt
 @role_required('admin')
 def registration_request_reject(request, id):
     """
@@ -602,3 +632,8 @@ def admin_create_account(request):
         }, status=201)
 
     return JsonResponse({'error': 'Method not allowed.'}, status=405)
+
+
+@ensure_csrf_cookie
+def get_csrf_token(request):
+    return JsonResponse({"message": "CSRF cookie set"})
