@@ -53,6 +53,8 @@ def create_account(request):
 
         try:
             from supabase import create_client
+            from mp.models import PatientProfile
+            
             supabase_client = create_client(settings.SUPABASE_URL, settings.SUPABASE_SERVICE_ROLE_KEY)
             res = supabase_client.auth.admin.create_user({
                 'email': email,
@@ -63,10 +65,13 @@ def create_account(request):
             supabase_uid = res.user.id
 
             django_user = User.objects.create_user(username=email, email=email, first_name=first_name, last_name=last_name)
+            
+            # Create the Identity Profile
             profile = UserProfile.objects.create(
                 user=django_user, role='patient', supabase_uid=supabase_uid, 
                 is_approved=False, dob=dob, gender=gender, barangay=barangay, phone_number=phone_number
             )
+            
             return JsonResponse({'message': 'Registration submitted.', 'display_id': profile.display_id}, status=201)
         except Exception as e:
             return JsonResponse({'error': str(e)}, status=500)
