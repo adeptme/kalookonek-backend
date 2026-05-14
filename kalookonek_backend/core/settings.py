@@ -9,6 +9,7 @@ https://docs.djangoproject.com/en/6.0/topics/settings/
 For the full list of settings and their values, see
 https://docs.djangoproject.com/en/6.0/ref/settings/
 """
+from datetime import timedelta
 import os
 from pathlib import Path
 from dotenv import load_dotenv
@@ -17,6 +18,9 @@ load_dotenv()
 SUPABASE_JWT_SECRET = os.environ.get('SUPABASE_JWT_SECRET')
 SUPABASE_URL = os.environ.get('SUPABASE_URL')
 SUPABASE_SERVICE_ROLE_KEY = os.environ.get('SUPABASE_SERVICE_ROLE_KEY')
+QR_BASE_URL = os.environ.get('QR_BASE_URL')
+QR_FORCE_HTTPS = os.environ.get('QR_FORCE_HTTPS', '').lower() in ('1', 'true', 'yes')
+QR_FULL_TTL_SECONDS = int(os.environ.get('QR_FULL_TTL_SECONDS', '900'))
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -31,7 +35,7 @@ SECRET_KEY = 'django-insecure-#$!=0(evvg)!@#r@ju^08-vq1((4n*b2ygjc83#d9mqtw5ja2=
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = ['localhost', '127.0.0.1', '10.0.2.2', 'http://localhost:5173']
 
 
 # Application definition
@@ -43,12 +47,14 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
-    'corsheaders', 
+    'corsheaders',
     'rest_framework',
+    'rest_framework.authtoken',
     'kalookonek_backend.accounts',
     'kalookonek_backend.mp',
     'kalookonek_backend.sysadmin',
-    'kalookonek_backend.user'
+    'kalookonek_backend.user',
+    'kalookonek_backend.qr',
 ]
 
 MIDDLEWARE = [
@@ -66,6 +72,9 @@ CORS_ALLOWED_ORIGINS = [
     "http://localhost:5173",
     "http://127.0.0.1:5173",
 ]
+
+CORS_ALLOW_CREDENTIALS = True  
+CSRF_TRUSTED_ORIGINS = ["http://localhost:5173"]
 
 CORS_ALLOW_HEADERS = [
     "accept",
@@ -159,14 +168,16 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
+        # Replace TokenAuthentication with this:
+        'kalookonek_backend.accounts.auth.SupabaseJWTAuthentication',
         'rest_framework_simplejwt.authentication.JWTAuthentication',
+        'rest_framework.authentication.SessionAuthentication',
     ),
     'DEFAULT_PERMISSION_CLASSES': (
         'rest_framework.permissions.IsAuthenticated',
     ),
 }
 
-from datetime import timedelta
 
 SIMPLE_JWT = {
     'SIGNING_KEY': os.environ.get('SUPABASE_JWT_SECRET'),
@@ -175,6 +186,6 @@ SIMPLE_JWT = {
     'ACCESS_TOKEN_LIFETIME': timedelta(minutes=60),
     'USER_ID_FIELD': 'username',
     'USER_ID_CLAIM': 'sub',
-    'LEEWAY': timedelta(seconds=10), 
-    'JTI_CLAIM': None,                
+    'LEEWAY': timedelta(seconds=10),
+    'JTI_CLAIM': None,
 }

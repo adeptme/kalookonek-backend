@@ -15,9 +15,16 @@ from rest_framework.response import Response
 # Local Imports
 from .auth import supabase_auth_required
 from .models import UserProfile
-from mp.models import MedicalRecord
+from kalookonek_backend.mp.models import MedicalRecord
+
+# Needed for Staff
+from django.contrib.auth import authenticate
+from django.contrib.auth.models import User
+from rest_framework.authtoken.models import Token
+from rest_framework.permissions import AllowAny
 
 logger = logging.getLogger(__name__)
+
 
 @csrf_exempt
 def create_account(request):
@@ -53,9 +60,8 @@ def create_account(request):
 
         try:
             from supabase import create_client
-            from mp.models import PatientProfile
-            
-            supabase_client = create_client(settings.SUPABASE_URL, settings.SUPABASE_SERVICE_ROLE_KEY)
+            supabase_client = create_client(
+                settings.SUPABASE_URL, settings.SUPABASE_SERVICE_ROLE_KEY)
             res = supabase_client.auth.admin.create_user({
                 'email': email,
                 'password': password,
@@ -64,11 +70,10 @@ def create_account(request):
             })
             supabase_uid = res.user.id
 
-            django_user = User.objects.create_user(username=email, email=email, first_name=first_name, last_name=last_name)
-            
-            # Create the Identity Profile
+            django_user = User.objects.create_user(
+                username=email, email=email, first_name=first_name, last_name=last_name)
             profile = UserProfile.objects.create(
-                user=django_user, role='patient', supabase_uid=supabase_uid, 
+                user=django_user, role='patient', supabase_uid=supabase_uid,
                 is_approved=False, dob=dob, gender=gender, barangay=barangay, phone_number=phone_number
             )
             
@@ -77,6 +82,7 @@ def create_account(request):
             return JsonResponse({'error': str(e)}, status=500)
 
     return JsonResponse({'error': 'Method not allowed.'}, status=405)
+
 
 @csrf_exempt
 def request_access(request):
@@ -93,7 +99,7 @@ def request_access(request):
 
         try:
             django_user = User.objects.create_user(
-                username=email, email=email, 
+                username=email, email=email,
                 first_name=data.get('first_name'), last_name=data.get('last_name')
             )
             profile = UserProfile.objects.create(
@@ -104,6 +110,7 @@ def request_access(request):
             return JsonResponse({'error': str(e)}, status=500)
 
     return JsonResponse({'error': 'Method not allowed.'}, status=405)
+
 
 @supabase_auth_required
 def get_profile(request):
@@ -128,6 +135,7 @@ def get_profile(request):
 # SETTINGS (Belongs in Accounts)
 # ---------------------------------------------------------------------------
 
+
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def get_profile_details(request):
@@ -137,6 +145,7 @@ def get_profile_details(request):
         'first_name': user.first_name, 'last_name': user.last_name, 'email': user.email,
         'dob': profile.dob, 'phone_number': profile.phone_number, 'gender': profile.gender,
     })
+
 
 @api_view(['PUT'])
 @permission_classes([IsAuthenticated])
@@ -150,11 +159,13 @@ def update_profile_info(request):
         user.save()
         profile.phone_number = data.get('phone_number', profile.phone_number)
         profile.gender = data.get('gender', profile.gender)
-        if 'dob' in data: profile.dob = data['dob']
+        if 'dob' in data:
+            profile.dob = data['dob']
         profile.save()
         return Response({'message': 'Profile updated successfully'})
     except Exception as e:
         return Response({'error': str(e)}, status=400)
+
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
@@ -165,3 +176,42 @@ def change_password(request):
     user.set_password(request.data.get('new_password'))
     user.save()
     return Response({'message': 'Password updated successfully'})
+
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def login_user(request):
+    """POST /accounts/login/ - Upgraded to handle Emails and Usernames"""
+    username_input = request.data.get('username')
+    password = request.data.get('password')
+
+    user = None
+
+    # 1. If they typed an email, find the corresponding Django username first
+    if '@' in username_input:
+        try:
+            user_obj = User.objects.get(email=username_input)
+            user = authenticate(username=user_obj.username, password=password)
+        except User.DoesNotExist:
+            pass
+    else:
+        # 2. Otherwise, authenticate normally
+        user = authenticate(username=username_input, password=password)
+
+    if user:
+        token, _ = Token.objects.get_or_create(user=user)
+
+        role = 'staff'
+        try:
+            role = user.userprofile.role
+        except Exception:
+            pass
+
+        return Response({
+            'token': token.key,
+            'user_id': user.id,
+            'role': role,
+            'full_name': user.get_full_name()
+        })
+    else:
+        return Response({'error': 'Invalid Staff ID or Password. Ensure your local Django password is set.'}, status=400)

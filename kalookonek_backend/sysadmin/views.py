@@ -2,6 +2,7 @@ import json
 import logging
 from django.http import JsonResponse, HttpResponse
 from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.csrf import ensure_csrf_cookie
 from django.utils import timezone
 from django.contrib.auth.models import User
 from kalookonek_backend.accounts.models import UserProfile
@@ -18,9 +19,12 @@ def dashboard(request):
     if request.method == 'GET':
         total_users = User.objects.count()
         total_patients = PatientProfile.objects.count()
-        pending_appointments = AppointmentRequest.objects.filter(status='PENDING').count()
-        pending_refills = RefillRequest.objects.filter(status='PENDING').count()
-        recent_announcements = Announcement.objects.select_related('author').order_by('-created_at')[:5]
+        pending_appointments = AppointmentRequest.objects.filter(
+            status='PENDING').count()
+        pending_refills = RefillRequest.objects.filter(
+            status='PENDING').count()
+        recent_announcements = Announcement.objects.select_related(
+            'author').order_by('-created_at')[:5]
 
         announcement_list = [
             {
@@ -103,7 +107,8 @@ def all_users(request):
 def user_detail(request, display_id):
     """GET/PUT/DELETE a user by their display_id."""
     try:
-        profile = UserProfile.objects.select_related('user').get(display_id=display_id)
+        profile = UserProfile.objects.select_related(
+            'user').get(display_id=display_id)
     except UserProfile.DoesNotExist:
         return JsonResponse({"error": "User not found."}, status=404)
 
@@ -146,6 +151,7 @@ def user_detail(request, display_id):
     return JsonResponse({"error": "Method not allowed."}, status=405)
 
 
+@csrf_exempt
 def announcements(request):
     """
     GET — public, returns all announcements.
@@ -153,6 +159,7 @@ def announcements(request):
     """
     if request.method == 'GET':
         announcements_qs = Announcement.objects.select_related('author').all()
+
         announcement_list = [
             {
                 "id": a.id,
@@ -160,10 +167,12 @@ def announcements(request):
                 "body": a.body,
                 "author": a.author.get_full_name() if a.author else "Unknown",
                 "is_published": a.is_published,
-                "date": a.created_at.strftime('%Y-%m-%d'),
+                "published_at": a.published_at.isoformat() if a.published_at else None,
+                "created_at": a.created_at.isoformat(),
             }
             for a in announcements_qs
         ]
+
         return JsonResponse({"announcements": announcement_list})
 
     elif request.method == 'POST':
@@ -175,15 +184,38 @@ def announcements(request):
 @role_required('staff', 'admin')
 def _create_announcement(request):
     """Internal helper — called from announcements() for POST."""
-    data = json.loads(request.body)
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON."}, status=400)
+
+    title = data.get('title', '').strip()
+    body = data.get('body', '').strip()
+    is_published = data.get('is_published', True)
+
+    if not title or not body:
+        return JsonResponse({"error": "Title and body are required."}, status=400)
+
     new_announcement = Announcement.objects.create(
-        title=data.get('title', ''),
-        body=data.get('body', ''),
+        title=title,
+        body=body,
         author=request.user,
-        is_published=data.get('is_published', False),
-        published_at=timezone.now() if data.get('is_published') else None
+        is_published=is_published,
+        published_at=timezone.now() if is_published else None
     )
-    return JsonResponse({"message": "Announcement created successfully.", "id": new_announcement.id})
+
+    return JsonResponse({
+        "message": "Announcement created successfully.",
+        "announcement": {
+            "id": new_announcement.id,
+            "title": new_announcement.title,
+            "body": new_announcement.body,
+            "author": new_announcement.author.get_full_name() if new_announcement.author else "Unknown",
+            "is_published": new_announcement.is_published,
+            "published_at": new_announcement.published_at.isoformat() if new_announcement.published_at else None,
+            "created_at": new_announcement.created_at.isoformat(),
+        }
+    }, status=201)
 
 
 def announcement_detail(request, id):
@@ -244,7 +276,8 @@ def appointment_requests(request):
     """
     if request.method == 'GET':
         status_filter = request.GET.get('status', None)
-        qs = AppointmentRequest.objects.select_related('patient__user').order_by('-created_at')
+        qs = AppointmentRequest.objects.select_related(
+            'patient__user').order_by('-created_at')
 
         if status_filter:
             qs = qs.filter(status=status_filter.upper())
@@ -300,11 +333,12 @@ def appointment_request_detail(request, id):
                         'notes': f"Auto-scheduled from request: {ar.reason}"
                     }
                 )
-                logger.info(f"Auto-created MedicalRecord for {ar.patient.user.email} on {ar.requested_date}")
+                logger.info(
+                    f"Auto-created MedicalRecord for {ar.patient.user.email} on {ar.requested_date}")
             except Exception as e:
                 logger.error(f"Failed to auto-create MedicalRecord: {e}")
                 # We still return success for the approval itself, but log the error
-        
+
         return JsonResponse({"message": f"Appointment request {new_status.lower()} successfully."})
 
     return JsonResponse({"error": "Method not allowed."}, status=405)
@@ -317,7 +351,8 @@ def refill_requests(request):
     """
     if request.method == 'GET':
         status_filter = request.GET.get('status', None)
-        qs = RefillRequest.objects.select_related('patient__user', 'medicine').order_by('-requested_at')
+        qs = RefillRequest.objects.select_related(
+            'patient__user', 'medicine').order_by('-requested_at')
 
         if status_filter:
             qs = qs.filter(status=status_filter.upper())
@@ -408,6 +443,7 @@ def registration_requests(request):
     return JsonResponse({"error": "Method not allowed."}, status=405)
 
 
+@csrf_exempt
 @role_required('admin')
 def registration_request_approve(request, id):
     """
@@ -426,18 +462,19 @@ def registration_request_approve(request, id):
         # --- Step 1: Handle Supabase Auth account ---
         # If they registered via Patient Sign-up, they already have a supabase_uid and password.
         # If they registered via Staff Request Access, they don't have an account yet.
-        
+
         temp_password = None
         if not profile.supabase_uid:
             try:
                 from supabase import create_client
-                supabase_client = create_client(settings.SUPABASE_URL, settings.SUPABASE_SERVICE_ROLE_KEY)
-                
+                supabase_client = create_client(
+                    settings.SUPABASE_URL, settings.SUPABASE_SERVICE_ROLE_KEY)
+
                 # Dynamic temporary password: FirstNameLastName123!
                 first = profile.user.first_name.replace(" ", "").capitalize()
                 last = profile.user.last_name.replace(" ", "").capitalize()
                 temp_password = f"{first}{last}123!"
-                
+
                 res = supabase_client.auth.admin.create_user({
                     'email': profile.user.email,
                     'password': temp_password,
@@ -448,15 +485,18 @@ def registration_request_approve(request, id):
                 })
 
                 profile.supabase_uid = res.user.id
-                logger.info(f"Supabase Auth user created for {profile.user.email} during approval, uid={profile.supabase_uid}")
+                logger.info(
+                    f"Supabase Auth user created for {profile.user.email} during approval, uid={profile.supabase_uid}")
             except Exception as e:
-                logger.error(f"Supabase create_user failed during approval for {profile.user.email}: {e}")
+                logger.error(
+                    f"Supabase create_user failed during approval for {profile.user.email}: {e}")
                 return JsonResponse(
                     {"error": f"Failed to create Supabase account: {str(e)}"},
                     status=500
                 )
         else:
-            logger.info(f"User {profile.user.email} already has Supabase ID {profile.supabase_uid}, skipping creation.")
+            logger.info(
+                f"User {profile.user.email} already has Supabase ID {profile.supabase_uid}, skipping creation.")
 
         # --- Step 2: Mark as approved ---
         profile.is_approved = True
@@ -491,6 +531,7 @@ def registration_request_approve(request, id):
     return JsonResponse({"error": "Method not allowed."}, status=405)
 
 
+@csrf_exempt
 @role_required('admin')
 def registration_request_reject(request, id):
     """
@@ -513,11 +554,10 @@ def registration_request_reject(request, id):
     return JsonResponse({"error": "Method not allowed."}, status=405)
 
 
-
 @csrf_exempt
 @role_required('admin')
 def admin_create_account(request):
-   
+
     if request.method == 'POST':
         try:
             data = json.loads(request.body)
@@ -530,7 +570,6 @@ def admin_create_account(request):
         last_name = data.get('last_name', '').strip()
         role = data.get('role', '').strip().lower()
 
-        
         if not email or not password or not first_name or not last_name:
             return JsonResponse({
                 'error': 'email, password, first_name, and last_name are required.'
@@ -548,11 +587,11 @@ def admin_create_account(request):
         if User.objects.filter(email=email).exists():
             return JsonResponse({'error': 'An account with this email already exists.'}, status=409)
 
-        
         try:
             from supabase import create_client
             from django.conf import settings as django_settings
-            supabase_client = create_client(django_settings.SUPABASE_URL, django_settings.SUPABASE_SERVICE_ROLE_KEY)
+            supabase_client = create_client(
+                django_settings.SUPABASE_URL, django_settings.SUPABASE_SERVICE_ROLE_KEY)
             res = supabase_client.auth.admin.create_user({
                 'email': email,
                 'password': password,
@@ -562,12 +601,12 @@ def admin_create_account(request):
                 }
             })
             supabase_uid = res.user.id
-            logger.info(f"Admin-created Supabase user for {email}, uid={supabase_uid}")
+            logger.info(
+                f"Admin-created Supabase user for {email}, uid={supabase_uid}")
         except Exception as e:
             logger.error(f"Supabase create_user failed for {email}: {e}")
             return JsonResponse({'error': f'Failed to create Supabase account: {str(e)}'}, status=500)
 
-        
         try:
             django_user = User.objects.create_user(
                 username=email,
@@ -582,16 +621,19 @@ def admin_create_account(request):
                 is_approved=True,  # Admin-created accounts are auto-approved
             )
         except Exception as db_err:
-            
+
             try:
                 supabase_client.auth.admin.delete_user(supabase_uid)
-                logger.warning(f"Rolled back Supabase user {supabase_uid} after Django DB failure.")
+                logger.warning(
+                    f"Rolled back Supabase user {supabase_uid} after Django DB failure.")
             except Exception:
                 pass
-            logger.error(f"Django DB error while admin-creating account for {email}: {db_err}")
+            logger.error(
+                f"Django DB error while admin-creating account for {email}: {db_err}")
             return JsonResponse({'error': f'Account creation failed: {str(db_err)}'}, status=500)
 
-        logger.info(f"Admin {request.user.email} created {role} account for {email} ({profile.display_id})")
+        logger.info(
+            f"Admin {request.user.email} created {role} account for {email} ({profile.display_id})")
 
         return JsonResponse({
             'message': f'{role.capitalize()} account created successfully.',
@@ -601,3 +643,8 @@ def admin_create_account(request):
         }, status=201)
 
     return JsonResponse({'error': 'Method not allowed.'}, status=405)
+
+
+@ensure_csrf_cookie
+def get_csrf_token(request):
+    return JsonResponse({"message": "CSRF cookie set"})
