@@ -24,14 +24,12 @@ def _get_patient_by_display_id(display_id):
     except UserProfile.DoesNotExist:
         return None, None
 
-    #try:
-    #    patient = PatientProfile.objects.get(user=profile.user)
-    #except PatientProfile.DoesNotExist:
-    #    return None, None
+    try:
+        patient = PatientProfile.objects.get(user=profile.user)
+    except PatientProfile.DoesNotExist:
+        return None, None
 
-    #return patient, profile
-    return None, profile
-
+    return patient, profile
 
 def _build_qr_png(data):
     qr = qrcode.QRCode(
