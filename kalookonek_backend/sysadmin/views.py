@@ -462,9 +462,9 @@ def registration_request_approve(request, id):
         profile.is_approved = True
         profile.save()
 
-        # --- Step 3: Populate PatientProfile (Day Zero Synchronization) ---
+       
         if profile.role == 'patient':
-            # We create the medical profile only at the moment of approval
+            
             PatientProfile.objects.get_or_create(
                 user=profile.user,
                 defaults={
