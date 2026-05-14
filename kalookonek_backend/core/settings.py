@@ -9,6 +9,7 @@ https://docs.djangoproject.com/en/6.0/topics/settings/
 For the full list of settings and their values, see
 https://docs.djangoproject.com/en/6.0/ref/settings/
 """
+from datetime import timedelta
 import os
 from pathlib import Path
 from dotenv import load_dotenv
@@ -31,7 +32,7 @@ SECRET_KEY = 'django-insecure-#$!=0(evvg)!@#r@ju^08-vq1((4n*b2ygjc83#d9mqtw5ja2=
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = ['localhost', '127.0.0.1', '10.0.2.2', 'http://localhost:5173']
 
 
 # Application definition
@@ -43,8 +44,9 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
-    'corsheaders', 
+    'corsheaders',
     'rest_framework',
+    'rest_framework.authtoken',
     'kalookonek_backend.accounts',
     'kalookonek_backend.mp',
     'kalookonek_backend.sysadmin',
@@ -159,14 +161,16 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
+        # Replace TokenAuthentication with this:
+        'kalookonek_backend.accounts.auth.SupabaseJWTAuthentication',
         'rest_framework_simplejwt.authentication.JWTAuthentication',
+        'rest_framework.authentication.SessionAuthentication',
     ),
     'DEFAULT_PERMISSION_CLASSES': (
         'rest_framework.permissions.IsAuthenticated',
     ),
 }
 
-from datetime import timedelta
 
 SIMPLE_JWT = {
     'SIGNING_KEY': os.environ.get('SUPABASE_JWT_SECRET'),
@@ -175,6 +179,6 @@ SIMPLE_JWT = {
     'ACCESS_TOKEN_LIFETIME': timedelta(minutes=60),
     'USER_ID_FIELD': 'username',
     'USER_ID_CLAIM': 'sub',
-    'LEEWAY': timedelta(seconds=10), 
-    'JTI_CLAIM': None,                
+    'LEEWAY': timedelta(seconds=10),
+    'JTI_CLAIM': None,
 }

@@ -6,6 +6,8 @@ from django.conf import settings
 from .models import UserProfile
 from jwt import PyJWKClient
 from django.views.decorators.csrf import csrf_exempt
+from rest_framework.authentication import BaseAuthentication
+from rest_framework.exceptions import AuthenticationFailed
 
 
 def supabase_auth_required(view_func):
@@ -45,17 +47,17 @@ def supabase_auth_required(view_func):
                 )
             elif alg in ['RS256', 'ES256']:
                 import os
-                
+
                 db_user = os.environ.get('DB_USER', '')
                 if '.' in db_user:
                     project_ref = db_user.split('.')[1]
                 else:
                     return JsonResponse({'error': 'Server misconfiguration: Could not determine Supabase project ref.'}, status=500)
-                
+
                 jwks_url = f"https://{project_ref}.supabase.co/auth/v1/.well-known/jwks.json"
                 jwks_client = PyJWKClient(jwks_url)
                 signing_key = jwks_client.get_signing_key_from_jwt(token)
-                
+
                 payload = jwt.decode(
                     token,
                     signing_key.key,
@@ -75,17 +77,16 @@ def supabase_auth_required(view_func):
         email = payload.get('email', '')
         user_metadata = payload.get('user_metadata', {})
 
-        
         role = user_metadata.get('role', 'patient')
         if role not in ('patient', 'staff', 'admin'):
             role = 'patient'
 
-       
         try:
-            profile = UserProfile.objects.select_related('user').get(supabase_uid=supabase_uid)
+            profile = UserProfile.objects.select_related(
+                'user').get(supabase_uid=supabase_uid)
             django_user = profile.user
         except UserProfile.DoesNotExist:
-            
+
             django_user, _ = User.objects.get_or_create(
                 username=email,
                 defaults={'email': email}
@@ -127,3 +128,61 @@ def role_required(*allowed_roles):
         # Apply supabase_auth_required as the outermost layer so it runs first
         return supabase_auth_required(wrapper)
     return decorator
+
+
+class SupabaseJWTAuthentication(BaseAuthentication):
+    """
+    Verifies Supabase ES256 JWTs and maps them to a Django user.
+    """
+
+    def authenticate(self, request):
+        auth_header = request.META.get('HTTP_AUTHORIZATION', '')
+
+        if not auth_header.startswith('Bearer '):
+            return None  # Let other authenticators try
+
+        token = auth_header.split(' ')[1]
+
+        try:
+            # Decode without verification first to get the kid (key ID)
+            unverified = jwt.get_unverified_header(token)
+            algorithm = unverified.get('alg', 'HS256')
+
+            if algorithm == 'HS256':
+                # Fallback for older Supabase projects
+                payload = jwt.decode(
+                    token,
+                    settings.SUPABASE_JWT_SECRET,
+                    algorithms=['HS256'],
+                    audience='authenticated',
+                )
+            else:
+                # ES256 — fetch public key from Supabase JWKS
+                jwks_client = jwt.PyJWKClient(
+                    f"{settings.SUPABASE_URL}/auth/v1/.well-known/jwks.json"
+                )
+                signing_key = jwks_client.get_signing_key_from_jwt(token)
+                payload = jwt.decode(
+                    token,
+                    signing_key.key,
+                    algorithms=['ES256'],
+                    audience='authenticated',
+                )
+
+        except jwt.ExpiredSignatureError:
+            raise AuthenticationFailed('Token has expired.')
+        except jwt.InvalidTokenError as e:
+            raise AuthenticationFailed(f'Invalid token: {e}')
+
+        # Map the Supabase user to a Django user via email
+        email = payload.get('email')
+        if not email:
+            raise AuthenticationFailed('Token has no email claim.')
+
+        try:
+            user = User.objects.get(email=email)
+        except User.DoesNotExist:
+            raise AuthenticationFailed(
+                f'No Django user found for {email}. Make sure the account exists.')
+
+        return (user, token)
