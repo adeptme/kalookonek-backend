@@ -1,58 +1,593 @@
 <!DOCTYPE html>
 <html lang="en">
-	<head>
-		<meta charset="UTF-8" />
-		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-		<title>Patient Record</title>
-		<py-script src="../../views.py"></py-script>
-	</head>
-	<body>
-		<main>
-			<h1>Patient Record</h1>
-			<section>
-				<h2>{{ patient_data.first_name }} {{ patient_data.last_name }}</h2>
-				<table>
-					<tbody>
-						<tr>
-							<th>Sex</th>
-							<td>{{ patient_data.sex|default:"-" }}</td>
-						</tr>
-						<tr>
-							<th>Date of Birth</th>
-							<td>{{ patient_data.date_of_birth|default:"-" }}</td>
-						</tr>
-						<tr>
-							<th>Age</th>
-							<td>{{ patient_data.age|default:"-" }}</td>
-						</tr>
-						<tr>
-							<th>Blood Type</th>
-							<td>{{ patient_data.blood_type|default:"-" }}</td>
-						</tr>
-						<tr>
-							<th>Address</th>
-							<td>{{ patient_data.address|default:"-" }}</td>
-						</tr>
-						<tr>
-							<th>Barangay</th>
-							<td>{{ patient_data.barangay|default:"-" }}</td>
-						</tr>
-						<tr>
-							<th>Emergency Contact</th>
-							<td>
-								{{ patient_data.emergency_contact_name|default:"-" }}
-								{% if patient_data.emergency_contact_number %}
-									({{ patient_data.emergency_contact_number }})
-								{% endif %}
-							</td>
-						</tr>
-						<tr>
-							<th>Allergies</th>
-							<td>{{ patient_data.allergies|default:"-" }}</td>
-						</tr>
-					</tbody>
-				</table>
-			</section>
-		</main>
-	</body>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Patient Profile</title>
+    <style>
+      *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+      :root {
+        --bg: #f4f6f9;
+        --white: #ffffff;
+        --border: #e5e8ed;
+        --text-primary: #1a1d23;
+        --text-secondary: #6b7280;
+        --text-label: #9ca3af;
+        --accent: #3b82f6;
+        --accent-light: #eff6ff;
+        --alert-red: #ef4444;
+        --alert-red-bg: #fef2f2;
+        --alert-red-border: #fecaca;
+        --alert-gray-bg: #f3f4f6;
+        --alert-gray-border: #e5e7eb;
+        --tag-bg: #fee2e2;
+        --tag-text: #991b1b;
+        --tag-border: #fca5a5;
+        --radius: 10px;
+        --shadow: 0 1px 3px rgba(0,0,0,0.07), 0 1px 2px rgba(0,0,0,0.05);
+      }
+
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        background: var(--bg);
+        color: var(--text-primary);
+        font-size: 14px;
+        min-height: 100vh;
+      }
+
+      /* ── DESKTOP LAYOUT ── */
+      .page-wrapper {
+        max-width: 900px;
+        margin: 0 auto;
+        padding: 24px 20px;
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+      }
+
+      /* Header Card */
+      .header-card {
+        background: var(--white);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        box-shadow: var(--shadow);
+        padding: 20px 24px;
+        display: flex;
+        align-items: center;
+        gap: 16px;
+      }
+
+      .avatar {
+        width: 52px;
+        height: 52px;
+        background: #e5e8ed;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+        color: #9ca3af;
+      }
+
+      .avatar svg { width: 26px; height: 26px; }
+
+      .header-info { flex: 1; min-width: 0; }
+
+      .header-info h1 {
+        font-size: 22px;
+        font-weight: 700;
+        color: var(--text-primary);
+        line-height: 1.2;
+      }
+
+      .header-meta {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-top: 5px;
+        flex-wrap: wrap;
+      }
+
+      .meta-item {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        font-size: 12.5px;
+        color: var(--text-secondary);
+      }
+
+      .meta-item svg { width: 13px; height: 13px; }
+
+      .meta-sep {
+        width: 3px;
+        height: 3px;
+        border-radius: 50%;
+        background: var(--text-label);
+      }
+
+      /* Main grid — two columns on desktop */
+      .main-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 16px;
+        align-items: start;
+      }
+
+      .left-col { display: flex; flex-direction: column; gap: 16px; }
+      .right-col { display: flex; flex-direction: column; gap: 0; }
+
+      /* Cards */
+      .card {
+        background: var(--white);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        box-shadow: var(--shadow);
+        overflow: hidden;
+      }
+
+      .card-header {
+        padding: 14px 20px;
+        font-size: 13.5px;
+        font-weight: 600;
+        color: var(--text-primary);
+        border-bottom: 1px solid var(--border);
+      }
+
+      .card-body { padding: 16px 20px; }
+
+      /* Two-column field grid inside cards */
+      .field-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 14px 20px;
+      }
+
+      .field-grid.single { grid-template-columns: 1fr; }
+
+      .field { display: flex; flex-direction: column; gap: 3px; }
+
+      .field-label {
+        font-size: 11px;
+        font-weight: 500;
+        color: var(--text-label);
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+      }
+
+      .field-value {
+        font-size: 13.5px;
+        color: var(--text-primary);
+        font-weight: 400;
+      }
+
+      /* Medical Alerts card — left border accent */
+      .alerts-card {
+        background: var(--white);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        box-shadow: var(--shadow);
+        overflow: hidden;
+      }
+
+      .alerts-header {
+        padding: 14px 20px;
+        font-size: 13.5px;
+        font-weight: 600;
+        color: #b91c1c;
+        border-bottom: 1px solid var(--border);
+        display: flex;
+        align-items: center;
+        gap: 7px;
+      }
+
+      .alerts-header svg { width: 15px; height: 15px; }
+
+      .alerts-card .card-body {
+        max-height: 190px;
+        overflow-y: auto;
+      }
+
+      .alert-item {
+        display: flex;
+        gap: 12px;
+        align-items: flex-start;
+        padding: 14px 20px;
+        border-bottom: 1px solid var(--border);
+      }
+
+      .alert-item:last-child { border-bottom: none; }
+
+      .alert-item.danger { background: var(--alert-red-bg); }
+      .alert-item.muted  { background: var(--alert-gray-bg); }
+
+      .alert-icon {
+        width: 28px;
+        height: 28px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+        margin-top: 1px;
+      }
+
+      .alert-icon.danger { background: var(--alert-red-border); }
+      .alert-icon.muted  { background: #d1d5db; }
+      .alert-icon svg    { width: 14px; height: 14px; }
+      .alert-icon.danger svg { color: var(--alert-red); }
+      .alert-icon.muted  svg { color: #6b7280; }
+
+      .alert-text h4 {
+        font-size: 13px;
+        font-weight: 600;
+        color: var(--text-primary);
+        margin-bottom: 2px;
+      }
+
+      .alert-text p {
+        font-size: 12.5px;
+        color: var(--text-secondary);
+        line-height: 1.45;
+      }
+
+      .alert-item.danger .alert-text h4 { color: #b91c1c; }
+      .alert-item.danger .alert-text p  { color: #b91c1c; }
+
+      /* Allergy tags */
+      .tag-list { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+
+      .tag {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        padding: 3px 9px;
+        background: var(--tag-bg);
+        border: 1px solid var(--tag-border);
+        border-radius: 20px;
+        font-size: 12px;
+        font-weight: 500;
+        color: var(--tag-text);
+      }
+
+      /* MRN badge */
+      .mrn-badge {
+        font-size: 12px;
+        color: var(--text-secondary);
+        font-weight: 400;
+        margin-top: 2px;
+      }
+
+      /* ── MOBILE LAYOUT (≤640px) ── */
+      @media (max-width: 640px) {
+        .page-wrapper { padding: 12px; gap: 12px; }
+
+        /* Stack header vertically */
+        .header-card { padding: 14px; gap: 12px; }
+        .header-info h1 { font-size: 17px; }
+        .btn-edit { display: none; } /* hide on mobile per design */
+
+        /* Single column */
+        .main-grid {
+          grid-template-columns: 1fr;
+        }
+
+        .field-grid { grid-template-columns: 1fr 1fr; gap: 10px 14px; }
+        .card-body  { padding: 14px 16px; }
+        .card-header { padding: 12px 16px; }
+
+        /* Mobile sections look like compact info cards */
+        .mobile-section-card {
+          background: var(--white);
+          border: 1px solid var(--border);
+          border-radius: var(--radius);
+          box-shadow: var(--shadow);
+          overflow: hidden;
+          margin-bottom: 12px;
+        }
+
+        .mobile-section-title {
+          font-size: 12px;
+          font-weight: 600;
+          color: var(--text-secondary);
+          text-transform: uppercase;
+          letter-spacing: 0.06em;
+          padding: 10px 16px 8px;
+          border-bottom: 1px solid var(--border);
+          display: flex;
+          align-items: center;
+          gap: 6px;
+        }
+
+        .mobile-section-title svg { width: 13px; height: 13px; }
+        .mobile-section-body { padding: 12px 16px; }
+
+        .alerts-card .card-body {
+          max-height: none;
+          overflow: visible;
+        }
+      }
+
+      /* ── SECTION ICON COLORS ── */
+      .icon-blue   { color: #3b82f6; }
+      .icon-yellow { color: #f59e0b; }
+      .icon-green  { color: #10b981; }
+      .icon-red    { color: #ef4444; }
+    </style>
+  </head>
+  <body>
+    <div class="page-wrapper">
+
+      <!-- ── HEADER ── -->
+      <div class="header-card">
+        <div class="avatar">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/>
+          </svg>
+        </div>
+        <div class="header-info">
+          <h1>{{ patient_data.first_name }} {{ patient_data.last_name }}</h1>
+          <div class="header-meta">
+            <span class="meta-item">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>
+              ID: #{{ patient_data.id|default:"—" }}
+            </span>
+            <span class="meta-sep"></span>
+            <span class="meta-item">{{ patient_data.sex|default:"-" }}</span>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- ── DESKTOP: two-column grid ── -->
+      <div class="main-grid">
+
+        <!-- LEFT: Personal Details + Contact -->
+        <div class="left-col">
+
+          <!-- Personal Information -->
+          <div class="card">
+            <div class="card-header">Personal Information</div>
+            <div class="card-body">
+              <div class="field-grid">
+                <div class="field">
+                  <span class="field-label">First Name</span>
+                  <span class="field-value">{{ patient_data.first_name|default:"-" }}</span>
+                </div>
+                <div class="field">
+                  <span class="field-label">Last Name</span>
+                  <span class="field-value">{{ patient_data.last_name|default:"-" }}</span>
+                </div>
+                <div class="field">
+                  <span class="field-label">ID Number</span>
+                  <span class="field-value">{{ patient_data.id|default:"-" }}</span>
+                </div>
+                <div class="field">
+                  <span class="field-label">Sex</span>
+                  <span class="field-value">{{ patient_data.sex|default:"-" }}</span>
+                </div>
+                <div class="field">
+                  <span class="field-label">Date of Birth</span>
+                  <span class="field-value">{{ patient_data.date_of_birth|default:"-" }}</span>
+                </div>
+                <div class="field">
+                  <span class="field-label">Blood Type</span>
+                  <span class="field-value">{{ patient_data.blood_type|default:"-" }}</span>
+                </div>
+                <div class="field" style="grid-column: 1 / -1;">
+                  <span class="field-label">Address</span>
+                  <span class="field-value">{{ patient_data.address|default:"-" }}</span>
+                </div>
+                <div class="field" style="grid-column: 1 / -1;">
+                  <span class="field-label">Barangay</span>
+                  <span class="field-value">{{ patient_data.barangay|default:"-" }}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Emergency Contact -->
+          <div class="card">
+            <div class="card-header">Emergency Contact</div>
+            <div class="card-body">
+              <div class="field-grid">
+                <div class="field">
+                  <span class="field-label">Contact Name</span>
+                  <span class="field-value">{{ patient_data.emergency_contact_name|default:"-" }}</span>
+                </div>
+                <div class="field">
+                  <span class="field-label">Contact Number</span>
+                  <span class="field-value">
+                    {% if patient_data.emergency_contact_number %}
+                      {{ patient_data.emergency_contact_number }}
+                    {% else %}
+                      -
+                    {% endif %}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+        </div><!-- /left-col -->
+
+        <!-- RIGHT: Medical Alerts -->
+        <div class="right-col">
+          <div class="alerts-card">
+            <div class="alerts-header">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+                <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+              </svg>
+              Medical Alerts
+            </div>
+
+            <div class="card-body">
+              {% if patient_data.allergies %}
+                {% for allergy in patient_data.allergies %}
+                  <div class="alert-item danger">
+                    <div class="alert-icon danger">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+                        <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+                      </svg>
+                    </div>
+                    <div class="alert-text">
+                      <h4>Allergy Alert</h4>
+                      <p>{{ allergy }}</p>
+                    </div>
+                  </div>
+                {% endfor %}
+              {% else %}
+                <div class="alert-item muted">
+                  <div class="alert-icon muted">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <circle cx="12" cy="12" r="10"/>
+                      <line x1="8" y1="12" x2="16" y2="12"/>
+                    </svg>
+                  </div>
+                  <div class="alert-text">
+                    <h4>No known alerts</h4>
+                    <p>No medical or allergy alerts recorded.</p>
+                  </div>
+                </div>
+              {% endif %}
+            </div>
+          </div>
+        </div><!-- /right-col -->
+
+      </div><!-- /main-grid -->
+
+      <!-- ── MOBILE-STYLE SUMMARY SECTIONS (visible on mobile, hidden on desktop) ── -->
+      <style>
+        .mobile-only { display: none; }
+        @media (max-width: 640px) {
+          .mobile-only  { display: block; }
+          .desktop-only { display: none; }
+        }
+      </style>
+
+      <!-- Desktop: Personal Info Summary row (hidden on mobile, visible desktop – already in header) -->
+      <!-- Mobile: compact cards matching mobile mockup -->
+      <div class="mobile-only">
+
+        <!-- Personal Info -->
+        <div class="mobile-section-card">
+          <div class="mobile-section-title">
+            <svg class="icon-blue" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/>
+            </svg>
+            Personal Information
+          </div>
+          <div class="mobile-section-body">
+            <div class="field-grid">
+              <div class="field">
+                <span class="field-label">First Name</span>
+                <span class="field-value">{{ patient_data.first_name|default:"-" }}</span>
+              </div>
+              <div class="field">
+                <span class="field-label">Last Name</span>
+                <span class="field-value">{{ patient_data.last_name|default:"-" }}</span>
+              </div>
+              <div class="field">
+                <span class="field-label">ID Number</span>
+                <span class="field-value">{{ patient_data.id|default:"-" }}</span>
+              </div>
+              <div class="field">
+                <span class="field-label">Sex</span>
+                <span class="field-value">{{ patient_data.sex|default:"-" }}</span>
+              </div>
+              <div class="field">
+                <span class="field-label">Date of Birth</span>
+                <span class="field-value">{{ patient_data.date_of_birth|default:"-" }}</span>
+              </div>
+              <div class="field">
+                <span class="field-label">Blood Type</span>
+                <span class="field-value">{{ patient_data.blood_type|default:"-" }}</span>
+              </div>
+              <div class="field" style="grid-column: 1 / -1;">
+                <span class="field-label">Address</span>
+                <span class="field-value">{{ patient_data.address|default:"-" }}</span>
+              </div>
+              <div class="field" style="grid-column: 1 / -1;">
+                <span class="field-label">Barangay</span>
+                <span class="field-value">{{ patient_data.barangay|default:"-" }}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Location -->
+        <div class="mobile-section-card">
+          <div class="mobile-section-title">
+            <svg class="icon-blue" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/>
+              <circle cx="12" cy="9" r="2.5"/>
+            </svg>
+            Location
+          </div>
+          <div class="mobile-section-body">
+            <div class="field" style="margin-bottom: 10px;">
+              <span class="field-label">Address</span>
+              <span class="field-value">{{ patient_data.address|default:"-" }}</span>
+            </div>
+            <div class="field">
+              <span class="field-label">Barangay / District</span>
+              <span class="field-value">{{ patient_data.barangay|default:"-" }}</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Emergency -->
+        <div class="mobile-section-card">
+          <div class="mobile-section-title">
+            <svg class="icon-blue" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07A19.5 19.5 0 013.07 9.81 19.79 19.79 0 01.03 1.18 2 2 0 012 0h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L6.09 7.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92z"/>
+            </svg>
+            Emergency
+          </div>
+          <div class="mobile-section-body">
+            <div class="field" style="margin-bottom: 10px;">
+              <span class="field-label">Contact Name</span>
+              <span class="field-value">{{ patient_data.emergency_contact_name|default:"-" }}</span>
+            </div>
+            <div class="field">
+              <span class="field-label">Contact Number</span>
+              <span class="field-value">
+                {% if patient_data.emergency_contact_number %}
+                  {{ patient_data.emergency_contact_number }}
+                {% else %}
+                  -
+                {% endif %}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Allergies -->
+        <div class="mobile-section-card">
+          <div class="mobile-section-title">
+            <svg class="icon-yellow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+              <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+            </svg>
+            Allergies
+          </div>
+          <div class="mobile-section-body">
+            <div class="tag-list">
+              {% if patient_data.allergies %}
+                {% for allergy in patient_data.allergies %}
+                  <span class="tag">{{ allergy }}</span>
+                {% endfor %}
+              {% else %}
+                <span style="color: var(--text-secondary); font-size: 13px;">No known allergies</span>
+              {% endif %}
+            </div>
+          </div>
+        </div>
+
+      </div><!-- /mobile-only -->
+
+    </div><!-- /page-wrapper -->
+  </body>
 </html>

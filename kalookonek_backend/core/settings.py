@@ -186,6 +186,6 @@ SIMPLE_JWT = {
     'ACCESS_TOKEN_LIFETIME': timedelta(minutes=60),
     'USER_ID_FIELD': 'username',
     'USER_ID_CLAIM': 'sub',
-    'LEEWAY': timedelta(seconds=10),
+    'LEEWAY': timedelta(minutes=5),
     'JTI_CLAIM': None,
 }
