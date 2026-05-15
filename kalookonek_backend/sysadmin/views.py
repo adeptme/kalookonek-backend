@@ -72,7 +72,14 @@ def admin_profile(request):
         user.save()
         profile.save()
 
-        
+        LogEntry.objects.create(
+            user=request.user,
+            action_flag=2,  # CHANGE
+            object_repr=user.first_name + " " + user.last_name,
+            change_message=f"Admin profile updated for {user.email}",
+            content_type_id=7,
+        )
+
         return JsonResponse({"message": "Admin profile updated successfully"})
 
     return JsonResponse({"error": "Method not allowed."}, status=405)
@@ -142,13 +149,24 @@ def user_detail(request, display_id):
         target_user.save()
         profile.save()
 
-        
+        LogEntry.objects.create(
+            user=request.user,
+            action_flag=2,  # CHANGE
+            object_repr=request.user.first_name + " " + request.user.last_name,
+            change_message=f"Admin {request.user.email} updated user {target_user.email}'s profile.",
+            content_type_id=7,
+        )
+
         return JsonResponse({"message": "User updated successfully."})
 
     elif request.method == 'DELETE':
-        
-
-
+        LogEntry.objects.create(
+            user=request.user,
+            action_flag=3,  # DELETION
+            object_repr=request.user.first_name + " " + request.user.last_name,
+            change_message=f"Admin {request.user.email} deleted user {target_user.email}.",
+            content_type_id=7,
+        )
         target_user.delete()
         return JsonResponse({"message": "User deleted successfully."})
 
@@ -320,6 +338,14 @@ def _update_announcement(request, item):
 def _delete_announcement(request, item):
     item.delete()
     
+    LogEntry.objects.create(
+        user=request.user,
+        action_flag=3,  # DELETION
+        object_repr=request.user.first_name + " " + request.user.last_name,
+        change_message=f"Announcement '{item.title}' deleted by {request.user.email}. Title was: '{item.title}'",
+        content_type_id=10,
+    )
+
     return JsonResponse({"message": "Announcement deleted successfully."})
 
 
@@ -387,9 +413,21 @@ def appointment_request_detail(request, id):
                         'notes': f"Auto-scheduled from request: {ar.reason}"
                     }
                 )
-                
+                LogEntry.objects.create(
+                    user=request.user,
+                    action_flag=1,  # ADDITION
+                    object_repr=request.user.first_name + " " + request.user.last_name,
+                    change_message=f"MedicalRecord auto-created for {ar.patient.user.email} on {ar.requested_date} from approved appointment request.",
+                    content_type_id=7,
+                )
             except Exception as e:
-                # We still return success for the approval itself, but log the error
+                LogEntry.objects.create(
+                    user=request.user,
+                    action_flag=3,  # DELETION
+                    object_repr=request.user.first_name + " " + request.user.last_name,
+                    change_message=f"Failed to auto-create MedicalRecord for {ar.patient.user.email} on {ar.requested_date} from approved appointment request.",
+                    content_type_id=7,
+                )
                 pass
 
         return JsonResponse({"message": f"Appointment request {new_status.lower()} successfully."})
@@ -511,9 +549,25 @@ def registration_request_approve(request, id):
             })
 
             profile.supabase_uid = res.user.id
+            LogEntry.objects.create(
+                user=request.user,
+                action_flag=1,  # ADDITION
+                object_repr=request.user.first_name + " " + request.user.last_name,
+                change_message=f"Supabase Auth user created for {profile.user.email} during approval.",
+                content_type_id=14,
+            )
 
         except Exception as e:
+            import logging
+            logger = logging.getLogger(__name__)
             logger.error(f"Supabase create_user failed during approval for {profile.user.email}: {e}")
+            LogEntry.objects.create(
+                user=request.user,
+                action_flag=3,  # DELETION
+                object_repr=request.user.first_name + " " + request.user.last_name,
+                change_message=f"Failed to create Supabase Auth user for {profile.user.email} during approval.",
+                content_type_id=14,
+            )
             return JsonResponse({
                 "error": f"Failed to create Supabase account: {str(e)}"
             }, status=500)
@@ -526,6 +580,14 @@ def registration_request_approve(request, id):
         msg += f" Account created with temporary password: {temp_password}"
     else:
         msg += " User can now log in with their chosen password."
+
+    LogEntry.objects.create(
+        user=request.user,
+        action_flag=2,  # CHANGE
+        object_repr=request.user.first_name + " " + request.user.last_name,
+        change_message=f"Approved registration request for {profile.user.email}.",
+        content_type_id=14,
+    )
 
     return JsonResponse({
         "message": msg,
@@ -552,6 +614,13 @@ def registration_request_reject(request, id):
 
     if request.method == 'PUT':
         email = profile.user.email
+        LogEntry.objects.create(
+            user=request.user,
+            action_flag=3,  # DELETION
+            object_repr=request.user.first_name + " " + request.user.last_name,
+            change_message=f"Rejected registration request for {email} and deleted the user.",
+            content_type_id=14,
+        )
         profile.user.delete()  # Cascades to delete the UserProfile too
         return JsonResponse({"message": f"Registration request for {email} rejected and removed."})
 
@@ -605,9 +674,22 @@ def admin_create_account(request):
                 }
             })
             supabase_uid = res.user.id
+            LogEntry.objects.create(
+                user=request.user,
+                action_flag=1,  # ADDITION
+                object_repr=request.user.first_name + " " + request.user.last_name,
+                change_message=f"{role.capitalize()} account created for {email} by admin {request.user.email}.",
+                content_type_id=7,
+            )
             
         except Exception as e:
-            
+            LogEntry.objects.create(
+                user=request.user,
+                action_flag=3,  # DELETION
+                object_repr=request.user.first_name + " " + request.user.last_name,
+                change_message=f"Failed to create {role.capitalize()} account for {email} by admin {request.user.email}.",
+                content_type_id=7,
+            )
             return JsonResponse({'error': f'Failed to create Supabase account: {str(e)}'}, status=500)
 
         try:
@@ -627,13 +709,32 @@ def admin_create_account(request):
 
             try:
                 supabase_client.auth.admin.delete_user(supabase_uid)
-                
+                LogEntry.objects.create(
+                    user=request.user,
+                    action_flag=3,  # DELETION
+                    object_repr=request.user.first_name + " " + request.user.last_name,
+                    change_message=f"Rolled back Supabase user {supabase_uid} after Django DB failure for {email}.",
+                    content_type_id=7,
+                )
             except Exception:
                 pass
             
+            LogEntry.objects.create(
+                user=request.user,
+                action_flag=3,  # DELETION
+                object_repr=request.user.first_name + " " + request.user.last_name,
+                change_message=f"Django DB error while admin-creating account for {email}: {db_err}",
+                content_type_id=7,
+            )
             return JsonResponse({'error': f'Account creation failed: {str(db_err)}'}, status=500)
 
-        
+        LogEntry.objects.create(
+            user=request.user,
+            action_flag=1,  # ADDITION
+            object_repr=request.user.first_name + " " + request.user.last_name,
+            change_message=f"Admin {request.user.email} created {role} account for {email} with display_id {profile.display_id}.",
+            content_type_id=7,
+        )
 
         return JsonResponse({
             'message': f'{role.capitalize()} account created successfully.',
@@ -704,7 +805,13 @@ def get_staff_accounts(request):
             target_user.save()
             profile.save()
 
-            
+            LogEntry.objects.create(
+                user=request.user,
+                action_flag=2,  # CHANGE
+                object_repr=request.user.first_name + " " + request.user.last_name,
+                change_message=f"Admin {request.user.email} updated user {target_user.email}'s profile.",
+                content_type_id=7,
+            )
 
             return JsonResponse({'message': f"User {target_user.email} updated successfully."}, status=200)
 
@@ -730,7 +837,13 @@ def get_staff_accounts(request):
             target_user.is_active = False
             target_user.save()
 
-
+            LogEntry.objects.create(
+                user=request.user,
+                action_flag=2,  # CHANGE
+                object_repr=request.user.first_name + " " + request.user.last_name,
+                change_message=f"Admin {request.user.email} deactivated user {target_user.email}.",
+                content_type_id=7,
+            )
 
             return JsonResponse({'message': f"User {email} deactivated successfully."}, status=200)
 
