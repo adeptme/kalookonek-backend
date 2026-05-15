@@ -63,6 +63,7 @@ def dashboard(request):
                 "title": a.title,
                 "body": a.body,
                 "date": a.published_at.strftime('%Y-%m-%d') if a.published_at else a.created_at.strftime('%Y-%m-%d'),
+                "time": a.published_at.strftime('%I:%M %p') if a.published_at else a.created_at.strftime('%I:%M %p'),
             }
             for a in announcements_qs
         ]

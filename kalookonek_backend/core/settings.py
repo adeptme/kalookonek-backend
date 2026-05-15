@@ -35,7 +35,7 @@ SECRET_KEY = 'django-insecure-#$!=0(evvg)!@#r@ju^08-vq1((4n*b2ygjc83#d9mqtw5ja2=
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = ['localhost', '127.0.0.1', '10.0.2.2', 'http://localhost:5173']
+ALLOWED_HOSTS = ['localhost', '127.0.0.1', '10.0.2.2', 'http://localhost:5173', '192.168.1.6', 'https://angry-aliens-spend.loca.lt']
 
 
 # Application definition
