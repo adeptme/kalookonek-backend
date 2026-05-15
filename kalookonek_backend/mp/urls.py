@@ -16,7 +16,11 @@ urlpatterns = [
          views.save_consultation, name='save_consultation'),
     path('mp/appointments/current/', views.get_current_patient,
          name='get_current_patient'),
-
+    path('mp/patient-history/<int:patient_id>/',
+         views.patient_history, name='patient_history'),
+    path('mp/appointments/<int:record_id>/reschedule/',
+         views.reschedule_appointment, name='reschedule_appointment'),
     # --- Directory & Search ---
     path('mp/directory/', views.patient_directory, name='patient_directory'),
+
 ]

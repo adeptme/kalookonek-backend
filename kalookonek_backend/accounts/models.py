@@ -14,7 +14,7 @@ class UserProfile(models.Model):
     role = models.CharField(max_length=10, choices=ROLE_CHOICES, default='patient')
     phone_number = models.CharField(max_length=20, blank=True)
     is_approved = models.BooleanField(default=False)
-    profile_picture = models.ImageField(upload_to='profile_pictures/', blank=True, null=True)
+    profile_picture = models.TextField(blank=True, null=True)
 
     # Extended demographic fields
     barangay = models.CharField(max_length=100, blank=True, null=True)
