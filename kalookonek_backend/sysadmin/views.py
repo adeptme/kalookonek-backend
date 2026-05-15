@@ -412,7 +412,7 @@ def admin_logs(request):
                 "action_time": log.action_time.isoformat(),
                 "content_type": log.content_type.name if log.content_type else "System",
                 "object_repr": log.object_repr,
-                "action_flag": log.get_action_flag_display(),
+                "action_flag": str(log.get_action_flag_display()),
                 "user_id": log.user_id
             }
             for log in logs
