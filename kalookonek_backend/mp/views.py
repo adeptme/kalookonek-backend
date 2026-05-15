@@ -18,16 +18,12 @@ from rest_framework.response import Response
 @permission_classes([IsAuthenticated])
 def dashboard(request):
     """GET — staff dashboard with patient count and recent records."""
-
-    # 1. Manual Role Check (Replacing the @role_required decorator)
-    # This ensures only staff/admin can see the data even if they have a valid token
     try:
         if request.user.userprofile.role not in ['staff', 'admin']:
             return Response({"error": "Forbidden: Staff access only."}, status=403)
     except Exception:
         return Response({"error": "User profile not found."}, status=403)
 
-    # 2. Logic
     total_patients = PatientProfile.objects.count()
     recent_records = MedicalRecord.objects.select_related(
         'patient__user'
@@ -41,7 +37,6 @@ def dashboard(request):
         "visit_date": r.visit_date.isoformat() if r.visit_date else None,
     } for r in recent_records]
 
-    # 3. Use DRF Response (instead of JsonResponse)
     return Response({
         "total_patients": total_patients,
         "recent_records": recent_list
@@ -65,7 +60,7 @@ def manual_lookup(request):
             Q(user__first_name__icontains=query) |
             Q(user__last_name__icontains=query) |
             Q(full_name__icontains=query)
-        )[:10]  # limit to 10 results
+        )[:10]
     except Exception as e:
         return Response({"error": "An error occurred while searching."}, status=500)
 
@@ -112,14 +107,12 @@ def update_patient_info(request, patient_id):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])  # This ensures the Token is checked
+@permission_classes([IsAuthenticated])
 def get_appointments(request):
     """Returns a list of scheduled medical records (appointments)."""
-    # 1. Get the tab from the Frontend (Dashboard.tsx/Appointments.tsx)
     tab = request.query_params.get('tab', "Today's List")
     today = timezone.now().date()
 
-    # 2. Filter logic based on the Tab
     query = MedicalRecord.objects.select_related(
         'patient__user', 'patient__user__profile')
 
@@ -134,13 +127,12 @@ def get_appointments(request):
 
     records = records.order_by('appointment_time')
 
-    # 3. Format data to match your React Interfaces
     data = [{
         'id': mr.id,
         'patient_name': mr.patient.user.get_full_name(),
-        'display_id': mr.patient.user.profile.display_id if hasattr(mr.patient.user.profile, 'display_id') else "N/A",
+        'display_id': mr.patient.user.profile.display_id if hasattr(mr.patient.user, 'profile') else "N/A",
         'time': mr.appointment_time.strftime('%I:%M %p') if mr.appointment_time else "TBA",
-        # Use a real field for purpose if you have one, or diagnosis
+        'end_time': '',  # add field if available
         'purpose': mr.diagnosis[:30] + "..." if mr.diagnosis else "Medical Consultation",
         'status': mr.status,
     } for mr in records]
@@ -158,8 +150,14 @@ def get_appointment_detail(request, record_id):
         'patient_name': mr.patient.user.get_full_name(),
         'patient_id_display': mr.patient.user.profile.display_id,
         'status': mr.status,
-        'dob': mr.patient.date_of_birth,
+        'visit_date': mr.visit_date,
         'age': mr.patient.age,
+        'sex': mr.patient.sex,
+        'blood_type': mr.patient.blood_type,
+        'allergies': mr.patient.allergies,
+        'barangay': mr.patient.barangay,
+        'emergency_contact_name': mr.patient.emergency_contact_name,
+        'emergency_contact_number': mr.patient.emergency_contact_number,
         'blood_pressure': mr.blood_pressure,
         'temperature': mr.temperature,
         'weight': mr.weight,
@@ -171,19 +169,6 @@ def get_appointment_detail(request, record_id):
         'treatment': mr.treatment,
         'prescription': mr.prescription,
         'notes': mr.notes,
-        'visit_date': mr.visit_date,
-
-        # PATIENT PROFILE
-        'patient_name': mr.patient.user.get_full_name(),
-        'patient_id_display': mr.patient.user.profile.display_id,
-        'dob': mr.patient.date_of_birth,
-        'age': mr.patient.age,
-        'sex': mr.patient.sex,
-        'blood_type': mr.patient.blood_type,
-        'allergies': mr.patient.allergies,
-        'barangay': mr.patient.barangay,
-        'emergency_contact_name': mr.patient.emergency_contact_name,
-        'emergency_contact_number': mr.patient.emergency_contact_number,
     })
 
 
@@ -228,7 +213,57 @@ def get_current_patient(request):
         'age': current_visit.patient.age,
     })
 
-# ... (Keeping existing directory and search views) ...
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def patient_history(request, patient_id):
+    """Returns all medical records for a given patient, newest first."""
+    try:
+        patient = PatientProfile.objects.get(id=patient_id)
+    except PatientProfile.DoesNotExist:
+        return Response({"error": "Patient not found."}, status=404)
+
+    records = MedicalRecord.objects.filter(
+        patient=patient).order_by('-visit_date', '-created_at')
+
+    data = [{
+        'id': mr.id,
+        'visit_date': mr.visit_date.isoformat() if mr.visit_date else None,
+        'appointment_time': mr.appointment_time.strftime('%I:%M %p') if mr.appointment_time else None,
+        'status': mr.status,
+        'diagnosis': mr.diagnosis,
+        'treatment': mr.treatment,
+        'prescription': mr.prescription,
+        'notes': mr.notes,
+    } for mr in records]
+
+    return Response(data)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def reschedule_appointment(request, record_id):
+    """POST — reschedule a medical record to a new date/time."""
+    mr = get_object_or_404(MedicalRecord, id=record_id)
+    data = request.data
+    new_date = data.get('date')
+    new_time = data.get('time')
+
+    if not new_date:
+        return Response({"error": "A new date is required."}, status=400)
+
+    try:
+        from datetime import datetime
+        mr.visit_date = datetime.strptime(new_date, '%Y-%m-%d').date()
+        if new_time:
+            mr.appointment_time = datetime.strptime(new_time, '%H:%M').time()
+        mr.status = 'SCHEDULED'
+        mr.save()
+        return Response({"message": "Appointment rescheduled successfully."})
+    except ValueError as e:
+        return Response({"error": f"Invalid date/time format: {e}"}, status=400)
+    except Exception as e:
+        return Response({"error": str(e)}, status=500)
 
 
 @api_view(['GET'])

@@ -153,7 +153,7 @@ class SupabaseJWTAuthentication(BaseAuthentication):
                 payload = jwt.decode(
                     token,
                     settings.SUPABASE_JWT_SECRET,
-                    algorithms=['HS256'],
+                    algorithms=['HS256', 'RS256'],
                     audience='authenticated',
                 )
             else:
@@ -186,3 +186,6 @@ class SupabaseJWTAuthentication(BaseAuthentication):
                 f'No Django user found for {email}. Make sure the account exists.')
 
         return (user, token)
+
+    def authenticate_header(self, request):
+        return 'Bearer'

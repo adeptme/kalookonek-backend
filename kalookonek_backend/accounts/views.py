@@ -144,6 +144,7 @@ def get_profile_details(request):
     return Response({
         'first_name': user.first_name, 'last_name': user.last_name, 'email': user.email,
         'dob': profile.dob, 'phone_number': profile.phone_number, 'gender': profile.gender,
+        'profile_picture': profile.profile_picture,
     })
 
 
@@ -161,6 +162,8 @@ def update_profile_info(request):
         profile.gender = data.get('gender', profile.gender)
         if 'dob' in data:
             profile.dob = data['dob']
+        if 'profile_picture' in data:
+            profile.profile_picture = data['profile_picture']
         profile.save()
         return Response({'message': 'Profile updated successfully'})
     except Exception as e:
@@ -213,7 +216,8 @@ def login_user(request):
             'role': role,
             'first_name': user.first_name,
             'last_name': user.last_name,
-            'full_name': f"{user.first_name} {user.last_name}".strip() or user.username
+            'full_name': f"{user.first_name} {user.last_name}".strip() or user.username,
+            'profile_picture': user.profile.profile_picture if hasattr(user, 'profile') else None,
         })
     else:
         return Response({'error': 'Invalid Staff ID or Password. Ensure your local Django password is set.'}, status=400)
