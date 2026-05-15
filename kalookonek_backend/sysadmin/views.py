@@ -298,7 +298,7 @@ def appointment_requests(request):
 
     return JsonResponse({"error": "Method not allowed."}, status=405)
 
-
+@csrf_exempt
 @role_required('admin')
 def appointment_request_detail(request, id):
     """
