@@ -110,6 +110,7 @@ def qr_scan_basic(request, token):
 
     context = {
         "patient_data": {
+            "id": profile.display_id,
             "first_name": profile.user.first_name,
             "last_name": profile.user.last_name,
             "age": profile.calculated_age if profile else None,
@@ -144,7 +145,9 @@ def qr_scan_full(request, token):
 
     context = {
         "patient_data": {
-            "name": profile.user.get_full_name(),
+            "id": profile.display_id,
+            "first_name": profile.user.first_name,
+            "last_name": profile.user.last_name,
             "sex": patient.sex,
             "date_of_birth": patient.date_of_birth,
             "blood_type": patient.blood_type,
