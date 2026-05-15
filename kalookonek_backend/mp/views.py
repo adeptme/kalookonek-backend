@@ -235,6 +235,12 @@ def patient_history(request, patient_id):
         'treatment': mr.treatment,
         'prescription': mr.prescription,
         'notes': mr.notes,
+        'blood_pressure': mr.blood_pressure,
+        'temperature': mr.temperature,
+        'heart_rate': mr.heart_rate,
+        'spo2': mr.spo2,
+        'weight': mr.weight,
+        'height': mr.height,
     } for mr in records]
 
     return Response(data)
