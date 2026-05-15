@@ -263,6 +263,7 @@ def create_announcement(request):
         return JsonResponse({"error": str(e)}, status=500)
 
 
+@csrf_exempt
 def announcement_detail(request, id):
     """
     GET — public.
@@ -278,9 +279,11 @@ def announcement_detail(request, id):
             "id": item.id,
             "title": item.title,
             "body": item.body,
+            "category": item.category,
+            "priority": item.priority,
             "author": item.author.get_full_name() if item.author else "Unknown",
             "is_published": item.is_published,
-            "date": item.created_at.strftime('%Y-%m-%d'),
+            "created_at": item.created_at.isoformat(),
         })
 
     elif request.method == 'PUT':
