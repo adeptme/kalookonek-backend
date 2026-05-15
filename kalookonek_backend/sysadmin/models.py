@@ -4,8 +4,32 @@ from kalookonek_backend.mp.models import PatientProfile
 
 
 class Announcement(models.Model):
+    CATEGORY_CHOICES = (
+        ('Health & Wellness', 'Health & Wellness'),
+        ('Pension Update', 'Pension Update'),
+        ('Events', 'Events'),
+        ('Emergency', 'Emergency'),
+        ('General', 'General'),
+    )
+
+    PRIORITY_CHOICES = (
+        ('Standard Information', 'Standard Information'),
+        ('Urgent', 'Urgent'),
+        ('High Priority', 'High Priority'),
+    )
+
     title = models.CharField(max_length=255)
     body = models.TextField()
+    category = models.CharField(
+        max_length=100,
+        choices=CATEGORY_CHOICES,
+        default='General'
+    )
+    priority = models.CharField(
+        max_length=100,
+        choices=PRIORITY_CHOICES,
+        default='Standard Information'
+    )
     image = models.ImageField(upload_to='announcements/', blank=True, null=True)
     author = models.ForeignKey(
         User,

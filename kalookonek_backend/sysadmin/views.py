@@ -72,12 +72,7 @@ def admin_profile(request):
         user.save()
         profile.save()
 
-        LogEntry.objects.create(
-            action_flag=2,  # CHANGE
-            object_repr= user.first_name + " " + user.last_name,
-            change_message=f"Admin profile updated for {user.email}",
-            content_type_id=7,
-        )
+        
         return JsonResponse({"message": "Admin profile updated successfully"})
 
     return JsonResponse({"error": "Method not allowed."}, status=405)
@@ -147,21 +142,13 @@ def user_detail(request, display_id):
         target_user.save()
         profile.save()
 
-        LogEntry.objects.create(
-            action_flag=2,  # CHANGE
-            object_repr= request.user.first_name + " " + request.user.last_name,
-            change_message=f"Admin {request.user.email} updated user {target_user.email}'s profile.",
-            content_type_id=7,
-        )
+        
         return JsonResponse({"message": "User updated successfully."})
 
     elif request.method == 'DELETE':
-        LogEntry.objects.create(
-            action_flag=3,  # DELETION
-            object_repr= request.user.first_name + " " + request.user.last_name,
-            change_message=f"Admin {request.user.email} deleted user {target_user.email}.",
-            content_type_id=7,
-        )
+        
+
+
         target_user.delete()
         return JsonResponse({"message": "User deleted successfully."})
 
@@ -175,13 +162,24 @@ def announcements(request):
     POST — requires staff/admin, creates an announcement.
     """
     if request.method == 'GET':
+        category_filter = request.GET.get('category', '').strip()
+        priority_filter = request.GET.get('priority', '').strip()
+
         announcements_qs = Announcement.objects.select_related('author').all()
+
+        if category_filter:
+            announcements_qs = announcements_qs.filter(category=category_filter)
+
+        if priority_filter:
+            announcements_qs = announcements_qs.filter(priority=priority_filter)
 
         announcement_list = [
             {
                 "id": a.id,
                 "title": a.title,
                 "body": a.body,
+                "category": a.category,
+                "priority": a.priority,
                 "author": a.author.get_full_name() if a.author else "Unknown",
                 "is_published": a.is_published,
                 "published_at": a.published_at.isoformat() if a.published_at else None,
@@ -189,63 +187,80 @@ def announcements(request):
             }
             for a in announcements_qs
         ]
-        return JsonResponse({"announcements": announcement_list})
 
-    elif request.method == 'POST':
-        LogEntry.objects.create(
-            action_flag=1,  # ADDITION
-            object_repr= request.user.first_name + " " + request.user.last_name,
-            change_message=f"Announcement created by {request.user.email}",
-            content_type_id=10,
-        )
+        return JsonResponse({"announcements": announcement_list}, status=200)
 
-        return _create_announcement(request)
+    if request.method == 'POST':
+        return create_announcement(request)
 
     return JsonResponse({"error": "Method not allowed."}, status=405)
 
 
+@csrf_exempt
 @role_required('staff', 'admin')
-def _create_announcement(request):
-    """Internal helper — called from announcements() for POST."""
+def create_announcement(request):
     try:
         data = json.loads(request.body)
     except json.JSONDecodeError:
         return JsonResponse({"error": "Invalid JSON."}, status=400)
 
-    title = data.get('title', '').strip()
-    body = data.get('body', '').strip()
-    is_published = data.get('is_published', True)
+    title = data.get("title", "").strip()
+    body = data.get("body", "").strip()
+    category = data.get("category", "General").strip()
+    priority = data.get("priority", "Standard Information").strip()
+    is_published = data.get("is_published", True)
+
+    valid_categories = [
+        "Health & Wellness",
+        "Pension Update",
+        "Events",
+        "Emergency",
+        "General",
+    ]
+
+    valid_priorities = [
+        "Standard Information",
+        "Urgent",
+        "High Priority",
+    ]
 
     if not title or not body:
         return JsonResponse({"error": "Title and body are required."}, status=400)
 
-    new_announcement = Announcement.objects.create(
-        title=title,
-        body=body,
-        author=request.user,
-        is_published=is_published,
-        published_at=timezone.now() if is_published else None
-    )
-    LogEntry.objects.create(
-        user=request.user,
-        action_flag=1,  # ADDITION
-        object_repr= request.user.first_name + " " + request.user.last_name,
-        change_message=f"Announcement '{title}' created by {request.user.email}, published={is_published}",
-        content_type_id=10,
-    )
+    if category not in valid_categories:
+        return JsonResponse({"error": "Invalid category."}, status=400)
 
-    return JsonResponse({
-        "message": "Announcement created successfully.",
-        "announcement": {
-            "id": new_announcement.id,
-            "title": new_announcement.title,
-            "body": new_announcement.body,
-            "author": new_announcement.author.get_full_name() if new_announcement.author else "Unknown",
-            "is_published": new_announcement.is_published,
-            "published_at": new_announcement.published_at.isoformat() if new_announcement.published_at else None,
-            "created_at": new_announcement.created_at.isoformat(),
-        }
-    }, status=201)
+    if priority not in valid_priorities:
+        return JsonResponse({"error": "Invalid priority."}, status=400)
+
+    try:
+        new_announcement = Announcement.objects.create(
+            title=title,
+            body=body,
+            category=category,
+            priority=priority,
+            author=request.user,
+            is_published=is_published,
+            published_at=timezone.now() if is_published else None
+        )
+
+        return JsonResponse({
+            "message": "Announcement created successfully.",
+            "announcement": {
+                "id": new_announcement.id,
+                "title": new_announcement.title,
+                "body": new_announcement.body,
+                "category": new_announcement.category,
+                "priority": new_announcement.priority,
+                "author": new_announcement.author.get_full_name() if new_announcement.author else "Unknown",
+                "is_published": new_announcement.is_published,
+                "published_at": new_announcement.published_at.isoformat() if new_announcement.published_at else None,
+                "created_at": new_announcement.created_at.isoformat(),
+            }
+        }, status=201)
+
+    except Exception as e:
+        return JsonResponse({"error": str(e)}, status=500)
 
 
 def announcement_detail(request, id):
@@ -304,13 +319,7 @@ def _update_announcement(request, item):
 @role_required('staff', 'admin')
 def _delete_announcement(request, item):
     item.delete()
-    LogEntry.objects.create(
-        user=request.user,
-        action_flag=3,  # DELETION
-        object_repr= request.user.first_name + " " + request.user.last_name,
-        change_message=f"Announcement '{item.title}' deleted by {request.user.email}. Title was: '{item.title}'",
-        content_type_id=10,
-    )
+    
     return JsonResponse({"message": "Announcement deleted successfully."})
 
 
@@ -378,22 +387,12 @@ def appointment_request_detail(request, id):
                         'notes': f"Auto-scheduled from request: {ar.reason}"
                     }
                 )
-                LogEntry.objects.create(
-                    action_flag=1,  # ADDITION
-                    object_repr= request.user.first_name + " " + request.user.last_name,
-                    change_message=f"MedicalRecord auto-created for {ar.patient.user.email} on {ar.requested_date} from approved appointment request.",
-                    content_type_id=7,
-                )
+                
             except Exception as e:
-                LogEntry.objects.create(
-                    action_flag=3,  # DELETION (used here to log a failed creation)
-                    object_repr= request.user.first_name + " " + request.user.last_name,
-                    change_message=f"Failed to auto-create MedicalRecord for {ar.patient.user.email} on {ar.requested_date} from approved appointment request.",
-                    content_type_id=7,
-                )
                 # We still return success for the approval itself, but log the error
+                pass
 
-        return JsonResponse({f"Appointment request {new_status.lower()} successfully."})
+        return JsonResponse({"message": f"Appointment request {new_status.lower()} successfully."})
 
     return JsonResponse({"error": "Method not allowed."}, status=405)
 
@@ -471,106 +470,69 @@ def registration_requests(request):
 @csrf_exempt
 @role_required('admin')
 def registration_request_approve(request, id):
-    """
-    PUT — approve a registration request.
-    Sends a Supabase invite email so the user can set their password.
-    """
     try:
         profile = UserProfile.objects.select_related('user').get(id=id)
     except UserProfile.DoesNotExist:
         return JsonResponse({"error": "Registration request not found."}, status=404)
 
+    if request.method not in ('POST', 'PUT'):
+        return JsonResponse({"error": "Method not allowed."}, status=405)
+
     if profile.is_approved:
         return JsonResponse({"error": "This user is already approved."}, status=400)
 
-    if request.method in ('POST', 'PUT'):
-        # --- Step 1: Handle Supabase Auth account ---
-        # If they registered via Patient Sign-up, they already have a supabase_uid and password.
-        # If they registered via Staff Request Access, they don't have an account yet.
+    temp_password = None
 
-        temp_password = None
-        if not profile.supabase_uid:
-            try:
-                from supabase import create_client
-                supabase_client = create_client(
-                    settings.SUPABASE_URL, settings.SUPABASE_SERVICE_ROLE_KEY)
+    if not profile.supabase_uid:
+        try:
+            from supabase import create_client
 
-                # Dynamic temporary password: FirstNameLastName123!
-                first = profile.user.first_name.replace(" ", "").capitalize()
-                last = profile.user.last_name.replace(" ", "").capitalize()
-                temp_password = f"{first}{last}123!"
+            if not settings.SUPABASE_URL or not settings.SUPABASE_SERVICE_ROLE_KEY:
+                return JsonResponse({
+                    "error": "Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY in backend .env."
+                }, status=500)
 
-                res = supabase_client.auth.admin.create_user({
-                    'email': profile.user.email,
-                    'password': temp_password,
-                    'email_confirm': True,
-                    'user_metadata': {
-                        'full_name': f"{profile.user.first_name} {profile.user.last_name}".strip()
-                    }
-                })
-
-                profile.supabase_uid = res.user.id
-                LogEntry.objects.create(
-                    action_flag=1,  # ADDITION
-                    object_repr= request.user.first_name + " " + request.user.last_name,
-                    change_message=f"Supabase Auth user created for {profile.user.email} during approval.",
-                    content_type_id=14,
-                )
-            except Exception as e:
-                LogEntry.objects.create(
-                    action_flag=3,  # DELETION (used here to log a failed creation)
-                    object_repr= request.user.first_name + " " + request.user.last_name,
-                    change_message=f"Failed to create Supabase Auth user for {profile.user.email} during approval.",
-                    content_type_id=14,
-                )
-                return JsonResponse(
-                    {"error": f"Failed to create Supabase account: {str(e)}"},
-                    status=500
-                )
-        else:
-            LogEntry.objects.create(
-                action_flag=2,  # CHANGE (used here to log skipping creation)
-                object_repr= request.user.first_name + " " + request.user.last_name,
-                change_message=f"User {profile.user.email} already has Supabase ID.",
-                content_type_id=14,
+            supabase_client = create_client(
+                settings.SUPABASE_URL,
+                settings.SUPABASE_SERVICE_ROLE_KEY
             )
 
-        # --- Step 2: Mark as approved ---
-        profile.is_approved = True
-        profile.save()
+            first = profile.user.first_name.replace(" ", "").capitalize()
+            last = profile.user.last_name.replace(" ", "").capitalize()
+            temp_password = f"{first}{last}123!"
 
-       
-        if profile.role == 'patient':
-            
-            PatientProfile.objects.get_or_create(
-                user=profile.user,
-                defaults={
-                    'date_of_birth': profile.dob or timezone.now().date(),
-                    'sex': profile.gender.lower() if profile.gender else 'other',
-                    'barangay': profile.barangay or '',
-                    'address': profile.barangay or '' # Placeholder
+            res = supabase_client.auth.admin.create_user({
+                'email': profile.user.email,
+                'password': temp_password,
+                'email_confirm': True,
+                'user_metadata': {
+                    'full_name': f"{profile.user.first_name} {profile.user.last_name}".strip()
                 }
-            )
+            })
 
-        msg = "Request approved."
-        if temp_password:
-            msg += f" Account created with temporary password: {temp_password}"
-        else:
-            msg += " User can now log in with their chosen password."
-        LogEntry.objects.create(
-            action_flag=2,  # CHANGE
-            object_repr= request.user.first_name + " " + request.user.last_name,
-            change_message=f"Approved registration request for {profile.user.email}.",
-            content_type_id=14,
-        )
-        return JsonResponse({
-            "message": msg,
-            "display_id": profile.display_id,
-            "email": profile.user.email,
-            "temporary_password": temp_password
-        })
+            profile.supabase_uid = res.user.id
 
-    return JsonResponse({"error": "Method not allowed."}, status=405)
+        except Exception as e:
+            logger.error(f"Supabase create_user failed during approval for {profile.user.email}: {e}")
+            return JsonResponse({
+                "error": f"Failed to create Supabase account: {str(e)}"
+            }, status=500)
+
+    profile.is_approved = True
+    profile.save()
+
+    msg = "Request approved."
+    if temp_password:
+        msg += f" Account created with temporary password: {temp_password}"
+    else:
+        msg += " User can now log in with their chosen password."
+
+    return JsonResponse({
+        "message": msg,
+        "display_id": profile.display_id,
+        "email": profile.user.email,
+        "temporary_password": temp_password
+    }, status=200)
 
 
 @csrf_exempt
@@ -591,12 +553,6 @@ def registration_request_reject(request, id):
     if request.method == 'PUT':
         email = profile.user.email
         profile.user.delete()  # Cascades to delete the UserProfile too
-        LogEntry.objects.create(
-            action_flag=3,  # DELETION
-            object_repr= request.user.first_name + " " + request.user.last_name,
-            change_message=f"Rejected registration request for {email} and deleted the user.",
-            content_type_id=14,
-        )
         return JsonResponse({"message": f"Registration request for {email} rejected and removed."})
 
     return JsonResponse({"error": "Method not allowed."}, status=405)
@@ -649,19 +605,9 @@ def admin_create_account(request):
                 }
             })
             supabase_uid = res.user.id
-            LogEntry.objects.create(
-                action_flag=1,  # ADDITION
-                object_repr= request.user.first_name + " " + request.user.last_name,
-                change_message=f"{role.capitalize()} account created for {email} by admin {request.user.email}.",
-                content_type_id=7,
-            )
+            
         except Exception as e:
-            LogEntry.objects.create(
-                action_flag=3,  # DELETION (used here to log a failed creation)
-                object_repr= request.user.first_name + " " + request.user.last_name,
-                change_message=f"Failed to create {role.capitalize()} account for {email} by admin {request.user.email}.",
-                content_type_id=7,
-            )
+            
             return JsonResponse({'error': f'Failed to create Supabase account: {str(e)}'}, status=500)
 
         try:
@@ -681,28 +627,13 @@ def admin_create_account(request):
 
             try:
                 supabase_client.auth.admin.delete_user(supabase_uid)
-                LogEntry.objects.create(
-                    action_flag=3,  # DELETION
-                    object_repr= request.user.first_name + " " + request.user.last_name,
-                    change_message=f"Rolled back Supabase user {supabase_uid} after Django DB failure for {email}.",
-                    content_type_id=7,
-                )
+                
             except Exception:
                 pass
-            LogEntry.objects.create(
-                action_flag=3,  # DELETION
-                object_repr= request.user.first_name + " " + request.user.last_name,
-                change_message=f"Django DB error while admin-creating account for {email}: {db_err}",
-                content_type_id=7,
-            )
+            
             return JsonResponse({'error': f'Account creation failed: {str(db_err)}'}, status=500)
 
-        LogEntry.objects.create(
-            action_flag=1,  # ADDITION
-            object_repr= request.user.first_name + " " + request.user.last_name,
-            change_message=f"Admin {request.user.email} created {role} account for {email} with display_id {profile.display_id}.",
-            content_type_id=7,
-        )
+        
 
         return JsonResponse({
             'message': f'{role.capitalize()} account created successfully.',
@@ -773,12 +704,7 @@ def get_staff_accounts(request):
             target_user.save()
             profile.save()
 
-            LogEntry.objects.create(
-                action_flag=2,  # CHANGE
-                object_repr= request.user.first_name + " " + request.user.last_name,
-                change_message=f"Admin {request.user.email} updated user {target_user.email}'s profile.",
-                content_type_id=7,
-            )
+            
 
             return JsonResponse({'message': f"User {target_user.email} updated successfully."}, status=200)
 
@@ -804,12 +730,7 @@ def get_staff_accounts(request):
             target_user.is_active = False
             target_user.save()
 
-            LogEntry.objects.create(
-                action_flag=2,  # CHANGE
-                object_repr= request.user.first_name + " " + request.user.last_name,
-                change_message=f"Admin {request.user.email} deactivated user {email}.",
-                content_type_id=7,
-            )
+
 
             return JsonResponse({'message': f"User {email} deactivated successfully."}, status=200)
 
