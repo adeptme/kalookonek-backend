@@ -408,23 +408,27 @@ def refill_request_detail(request, id):
 @role_required('admin')
 def admin_logs(request):
     """
-    GET — return recent medical records for admin review.
-    This is a simple example of how the admin can view patient activity logs.
+    GET — return recent Django admin/system logs.
     """
-    logs=LogEntry.objects.all()
-    log_list = [
-        {
-            "id": log.id,
-            "user": log.user.get_full_name(),
-            "action_time": log.action_time.isoformat(),
-            "content_type": log.content_type.name,
-            "object_repr": log.object_repr,
-            "action_flag": log.get_action_flag_display(),
-            "user_id": log.user_id
-        }
-        for log in logs
-    ]
-    return JsonResponse({"logs": log_list})
+    if request.method == 'GET':
+        logs = LogEntry.objects.select_related('user', 'content_type').order_by('-action_time')[:100]
+
+        log_list = [
+            {
+                "id": log.id,
+                "user": log.user.get_full_name() or log.user.email or log.user.username,
+                "action_time": log.action_time.isoformat(),
+                "content_type": log.content_type.name if log.content_type else "System",
+                "object_repr": log.object_repr,
+                "action_flag": log.get_action_flag_display(),
+                "user_id": log.user_id,
+            }
+            for log in logs
+        ]
+
+        return JsonResponse({"logs": log_list}, status=200)
+
+    return JsonResponse({"error": "Method not allowed."}, status=405)
 
 # ---------------------------------------------------------------------------
 # Registration Request Management (uses UserProfile.is_approved)
@@ -677,16 +681,26 @@ def admin_create_account(request):
 @role_required('admin')
 def get_staff_accounts(request):
     if request.method == 'GET':
-        staff_accounts = UserProfile.objects.filter(role__in=['staff', 'admin']).select_related('user')
+        staff_accounts = UserProfile.objects.filter(
+            role__in=['staff', 'admin']
+        ).select_related('user')
+
         data = []
+
         for profile in staff_accounts:
+            if profile.user.is_superuser:
+                continue
+
             data.append({
                 'display_id': profile.display_id,
                 'email': profile.user.email,
                 'first_name': profile.user.first_name,
                 'last_name': profile.user.last_name,
+                'role': profile.role,
+                'is_active': profile.user.is_active,
                 'is_approved': profile.is_approved
             })
+
         return JsonResponse({'staff_accounts': data}, status=200)
 
     if request.method == 'PUT':
@@ -694,11 +708,8 @@ def get_staff_accounts(request):
             data = json.loads(request.body)
             display_id = data.get('display_id')
 
-            target_user = UserProfile.objects.select_related('user').get(display_id=display_id).user
-            target_user.first_name = data.get('first_name', target_user.first_name)
-            target_user.last_name = data.get('last_name', target_user.last_name)
-            target_user.email = data.get('email', target_user.email)
-            target_user.save()
+            if not display_id:
+                return JsonResponse({'error': 'display_id is required.'}, status=400)
 
             try:
                 profile = UserProfile.objects.select_related('user').get(display_id=display_id)
@@ -708,22 +719,49 @@ def get_staff_accounts(request):
             if profile.role not in ['staff', 'admin']:
                 return JsonResponse({'error': 'User is not a staff or admin account.'}, status=400)
 
+            target_user = profile.user
+
+            target_user.first_name = data.get('first_name', target_user.first_name)
+            target_user.last_name = data.get('last_name', target_user.last_name)
+            target_user.email = data.get('email', target_user.email)
+
+            if 'is_active' in data:
+                target_user.is_active = data.get('is_active')
+
+            if 'role' in data:
+                new_role = data.get('role')
+                if new_role not in ['staff', 'admin']:
+                    return JsonResponse({'error': 'Role must be staff or admin.'}, status=400)
+                profile.role = new_role
+
+            target_user.save()
+            profile.save()
+
             logger.info(f"Admin {request.user.email} updated user {target_user.email}.")
 
             return JsonResponse({'message': f"User {target_user.email} updated successfully."}, status=200)
 
         except json.JSONDecodeError:
             return JsonResponse({'error': 'Invalid JSON.'}, status=400)
-        
+
     if request.method == 'POST':
         try:
             data = json.loads(request.body)
             display_id = data.get('display_id')
 
-            target_user = UserProfile.objects.select_related('user').get(display_id=display_id).user
+            if not display_id:
+                return JsonResponse({'error': 'display_id is required.'}, status=400)
+
+            profile = UserProfile.objects.select_related('user').get(display_id=display_id)
+
+            if profile.role not in ['staff', 'admin']:
+                return JsonResponse({'error': 'User is not a staff or admin account.'}, status=400)
+
+            target_user = profile.user
             email = target_user.email
-            target_user.user.is_active = False 
-            target_user.user.save()
+
+            target_user.is_active = False
+            target_user.save()
 
             logger.info(f"Admin {request.user.email} successfully deactivated {email}.")
 

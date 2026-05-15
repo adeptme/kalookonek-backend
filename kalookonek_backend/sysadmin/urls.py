@@ -5,6 +5,8 @@ from . import views
 urlpatterns = [
     path('sysad/dashboard/', views.dashboard, name='admin_dashboard'),
     path('sysad/profile/', views.admin_profile, name='admin_profile'),
+    path('sysad/logs/', views.admin_logs, name='admin_logs'),
+    path('sysad/staff-accounts/', views.get_staff_accounts, name='get_staff_accounts'),
     path('sysad/users/', views.all_users, name='all_users'),
     path('sysad/users/create/', views.admin_create_account, name='admin_create_account'),
     path('sysad/users/<str:display_id>/', views.user_detail, name='user_detail'),
