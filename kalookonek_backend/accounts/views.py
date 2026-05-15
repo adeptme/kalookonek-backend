@@ -141,11 +141,39 @@ def get_profile(request):
 def get_profile_details(request):
     user = request.user
     profile = user.profile
+
+    # Build patient_info from PatientProfile if it exists
+    patient_info = None
+    try:
+        from kalookonek_backend.mp.models import PatientProfile
+        patient = PatientProfile.objects.get(user=user)
+        patient_info = {
+            'date_of_birth': patient.date_of_birth.isoformat() if patient.date_of_birth else None,
+            'age': patient.age,
+            'sex': patient.sex,
+            'blood_type': patient.blood_type,
+            'address': patient.address,
+            'barangay': patient.barangay,
+            'emergency_contact_name': patient.emergency_contact_name,
+            'emergency_contact_number': patient.emergency_contact_number,
+            'allergies': patient.allergies,
+        }
+    except PatientProfile.DoesNotExist:
+        pass
+
     return Response({
-        'first_name': user.first_name, 'last_name': user.last_name, 'email': user.email,
-        'dob': profile.dob, 'phone_number': profile.phone_number, 'gender': profile.gender,
+        'display_id': profile.display_id,
+        'osca_id': profile.display_id,
+        'first_name': user.first_name,
+        'last_name': user.last_name,
+        'email': user.email,
+        'dob': profile.dob,
+        'phone_number': profile.phone_number,
+        'gender': profile.gender,
         'profile_picture': profile.profile_picture,
+        'patient_info': patient_info,
     })
+
 
 
 @api_view(['PUT'])

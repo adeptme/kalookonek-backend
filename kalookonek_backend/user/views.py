@@ -89,19 +89,18 @@ def user_profile(request):
     user = request.user
 
     if request.method == 'GET':
-        # 1. Build the full URL for the image so the frontend can display it
-        profile_pic_url = None
-        if profile.profile_picture:
-            profile_pic_url = request.build_absolute_uri(profile.profile_picture.url)
+        # profile_picture is a TextField storing a URL string, not a FileField
+        profile_pic_url = profile.profile_picture or None
 
         data = {
             "display_id": profile.display_id,
+            "osca_id": profile.display_id,  # Alias for frontend compatibility
             "first_name": user.first_name,
             "last_name": user.last_name,
             "email": user.email,
             "role": profile.role,
             "phone_number": profile.phone_number,
-            "profile_picture": profile_pic_url, # 2. Send it back to the app/dashboard!
+            "profile_picture": profile_pic_url,
         }
 
         # Include PatientProfile data if it exists
@@ -180,8 +179,8 @@ def user_profile(request):
         user.save()
         profile.save()
         
-        # Build the new URL to return instantly upon saving
-        new_pic_url = request.build_absolute_uri(profile.profile_picture.url) if profile.profile_picture else None
+        # profile_picture is a TextField, return it directly
+        new_pic_url = profile.profile_picture or None
 
         return JsonResponse({
             "message": "Profile updated successfully.", 
