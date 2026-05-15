@@ -492,8 +492,7 @@
             </div>
 
             <div class="card-body">
-              {% if patient_data.allergies %}
-                {% for allergy in patient_data.allergies %}
+              {% if patient_data.allergies and patient_data.allergies != "N/A" %}
                   <div class="alert-item danger">
                     <div class="alert-icon danger">
                       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -503,10 +502,9 @@
                     </div>
                     <div class="alert-text">
                       <h4>Allergy Alert</h4>
-                      <p>{{ allergy }}</p>
+                      <p>{{ patient_data.allergies }}</p>
                     </div>
                   </div>
-                {% endfor %}
               {% else %}
                 <div class="alert-item muted">
                   <div class="alert-icon muted">
@@ -739,10 +737,8 @@
           </div>
           <div class="mobile-section-body">
             <div class="tag-list">
-              {% if patient_data.allergies %}
-                {% for allergy in patient_data.allergies %}
-                  <span class="tag">{{ allergy }}</span>
-                {% endfor %}
+              {% if patient_data.allergies and patient_data.allergies != "N/A" %}
+                  <span class="tag">{{ patient_data.allergies }}</span>
               {% else %}
                 <span style="color: var(--text-secondary); font-size: 13px;">No known allergies</span>
               {% endif %}
