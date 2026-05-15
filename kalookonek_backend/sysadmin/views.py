@@ -10,6 +10,7 @@ from kalookonek_backend.accounts.auth import role_required, supabase_auth_requir
 from .models import Announcement, AppointmentRequest, RefillRequest
 from kalookonek_backend.mp.models import PatientProfile, MedicalRecord
 from django.conf import settings
+from django.contrib.admin.models import LogEntry
 
 logger = logging.getLogger(__name__)
 
@@ -74,6 +75,7 @@ def admin_profile(request):
         user.save()
         profile.save()
 
+        logger.info(f"Admin {user.email} updated their profile.")
         return JsonResponse({"message": "Admin profile updated successfully"})
 
     return JsonResponse({"error": "Method not allowed."}, status=405)
@@ -142,9 +144,11 @@ def user_detail(request, display_id):
 
         target_user.save()
         profile.save()
+        logger.info(f"Admin {request.user.email} updated user {target_user.email}'s profile.")
         return JsonResponse({"message": "User updated successfully."})
 
     elif request.method == 'DELETE':
+        logger.info(f"Admin {request.user.email} deleted user {target_user.email}.")
         target_user.delete()
         return JsonResponse({"message": "User deleted successfully."})
 
@@ -172,10 +176,10 @@ def announcements(request):
             }
             for a in announcements_qs
         ]
-
         return JsonResponse({"announcements": announcement_list})
 
     elif request.method == 'POST':
+        logger.info(f"Announcement created by {request.user.email}")
         return _create_announcement(request)
 
     return JsonResponse({"error": "Method not allowed."}, status=405)
@@ -203,6 +207,8 @@ def _create_announcement(request):
         is_published=is_published,
         published_at=timezone.now() if is_published else None
     )
+
+    logger.info(f"Announcement '{title}' created by {request.user.email}, published={is_published}")
 
     return JsonResponse({
         "message": "Announcement created successfully.",
@@ -266,6 +272,7 @@ def _update_announcement(request, item):
 @role_required('staff', 'admin')
 def _delete_announcement(request, item):
     item.delete()
+    logger.info(f"Announcement deleted by {request.user.email}. Title was: '{item.title}'")
     return JsonResponse({"message": "Announcement deleted successfully."})
 
 
@@ -339,7 +346,7 @@ def appointment_request_detail(request, id):
                 logger.error(f"Failed to auto-create MedicalRecord: {e}")
                 # We still return success for the approval itself, but log the error
 
-        return JsonResponse({"message": f"Appointment request {new_status.lower()} successfully."})
+        return JsonResponse({f"Appointment request {new_status.lower()} successfully."})
 
     return JsonResponse({"error": "Method not allowed."}, status=405)
 
@@ -397,6 +404,27 @@ def refill_request_detail(request, id):
 
     return JsonResponse({"error": "Method not allowed."}, status=405)
 
+@csrf_exempt
+@role_required('admin')
+def admin_logs(request):
+    """
+    GET — return recent medical records for admin review.
+    This is a simple example of how the admin can view patient activity logs.
+    """
+    logs=LogEntry.objects.all()
+    log_list = [
+        {
+            "id": log.id,
+            "user": log.user.get_full_name(),
+            "action_time": log.action_time.isoformat(),
+            "content_type": log.content_type.name,
+            "object_repr": log.object_repr,
+            "action_flag": log.get_action_flag_display(),
+            "user_id": log.user_id
+        }
+        for log in logs
+    ]
+    return JsonResponse({"logs": log_list})
 
 # ---------------------------------------------------------------------------
 # Registration Request Management (uses UserProfile.is_approved)
@@ -520,7 +548,7 @@ def registration_request_approve(request, id):
             msg += f" Account created with temporary password: {temp_password}"
         else:
             msg += " User can now log in with their chosen password."
-
+        logger.info(f"Admin {request.user.email} approved registration request for {profile.user.email}.")
         return JsonResponse({
             "message": msg,
             "display_id": profile.display_id,
@@ -549,6 +577,7 @@ def registration_request_reject(request, id):
     if request.method == 'PUT':
         email = profile.user.email
         profile.user.delete()  # Cascades to delete the UserProfile too
+        logger.info(f"Admin {request.user.email} rejected registration request for {email} and deleted the user.")
         return JsonResponse({"message": f"Registration request for {email} rejected and removed."})
 
     return JsonResponse({"error": "Method not allowed."}, status=405)
@@ -641,6 +670,69 @@ def admin_create_account(request):
             'email': email,
             'role': role,
         }, status=201)
+
+    return JsonResponse({'error': 'Method not allowed.'}, status=405)
+
+@csrf_exempt
+@role_required('admin')
+def get_staff_accounts(request):
+    if request.method == 'GET':
+        staff_accounts = UserProfile.objects.filter(role__in=['staff', 'admin']).select_related('user')
+        data = []
+        for profile in staff_accounts:
+            data.append({
+                'display_id': profile.display_id,
+                'email': profile.user.email,
+                'first_name': profile.user.first_name,
+                'last_name': profile.user.last_name,
+                'is_approved': profile.is_approved
+            })
+        return JsonResponse({'staff_accounts': data}, status=200)
+
+    if request.method == 'PUT':
+        try:
+            data = json.loads(request.body)
+            display_id = data.get('display_id')
+
+            target_user = UserProfile.objects.select_related('user').get(display_id=display_id).user
+            target_user.first_name = data.get('first_name', target_user.first_name)
+            target_user.last_name = data.get('last_name', target_user.last_name)
+            target_user.email = data.get('email', target_user.email)
+            target_user.save()
+
+            try:
+                profile = UserProfile.objects.select_related('user').get(display_id=display_id)
+            except UserProfile.DoesNotExist:
+                return JsonResponse({'error': 'User not found.'}, status=404)
+
+            if profile.role not in ['staff', 'admin']:
+                return JsonResponse({'error': 'User is not a staff or admin account.'}, status=400)
+
+            logger.info(f"Admin {request.user.email} updated user {target_user.email}.")
+
+            return JsonResponse({'message': f"User {target_user.email} updated successfully."}, status=200)
+
+        except json.JSONDecodeError:
+            return JsonResponse({'error': 'Invalid JSON.'}, status=400)
+        
+    if request.method == 'POST':
+        try:
+            data = json.loads(request.body)
+            display_id = data.get('display_id')
+
+            target_user = UserProfile.objects.select_related('user').get(display_id=display_id).user
+            email = target_user.email
+            target_user.user.is_active = False 
+            target_user.user.save()
+
+            logger.info(f"Admin {request.user.email} successfully deactivated {email}.")
+
+            return JsonResponse({'message': f"User {email} deactivated successfully."}, status=200)
+
+        except json.JSONDecodeError:
+            return JsonResponse({'error': 'Invalid JSON.'}, status=400)
+        except UserProfile.DoesNotExist:
+            return JsonResponse({'error': 'User not found.'}, status=404)
 
     return JsonResponse({'error': 'Method not allowed.'}, status=405)
 

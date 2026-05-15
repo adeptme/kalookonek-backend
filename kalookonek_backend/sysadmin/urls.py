@@ -14,7 +14,7 @@ urlpatterns = [
     path('sysad/appointment-requests/<int:id>/', views.appointment_request_detail, name='appointment_request_detail'),
     path('sysad/refill-requests/', views.refill_requests, name='refill_requests'),
     path('sysad/refill-requests/<int:id>/', views.refill_request_detail, name='refill_request_detail'),
-
+    path('sysad/logs/', views.admin_logs, name='system_logs'),
     # Registration request management
     path('sysad/registration-requests/', views.registration_requests, name='registration_requests'),
     path('sysad/registration-requests/<int:id>/approve/', views.registration_request_approve, name='registration_request_approve'),

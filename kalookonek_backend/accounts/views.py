@@ -76,7 +76,7 @@ def create_account(request):
                 user=django_user, role='patient', supabase_uid=supabase_uid,
                 is_approved=False, dob=dob, gender=gender, barangay=barangay, phone_number=phone_number
             )
-            
+
             return JsonResponse({'message': 'Registration submitted.', 'display_id': profile.display_id}, status=201)
         except Exception as e:
             return JsonResponse({'error': str(e)}, status=500)
@@ -211,7 +211,9 @@ def login_user(request):
             'token': token.key,
             'user_id': user.id,
             'role': role,
-            'full_name': user.get_full_name()
+            'first_name': user.first_name,
+            'last_name': user.last_name,
+            'full_name': f"{user.first_name} {user.last_name}".strip() or user.username
         })
     else:
         return Response({'error': 'Invalid Staff ID or Password. Ensure your local Django password is set.'}, status=400)
