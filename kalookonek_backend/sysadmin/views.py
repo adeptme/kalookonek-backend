@@ -578,6 +578,19 @@ def registration_request_approve(request, id):
     profile.is_approved = True
     profile.save()
 
+    if profile.role == 'patient':
+            
+            PatientProfile.objects.get_or_create(
+                user=profile.user,
+                defaults={
+                    'date_of_birth': profile.dob or timezone.now().date(),
+                    'sex': profile.gender.lower() if profile.gender else 'other',
+                    'barangay': profile.barangay or '',
+                    'address': profile.barangay or '' # Placeholder
+                }
+            )
+
+
     msg = "Request approved."
     if temp_password:
         msg += f" Account created with temporary password: {temp_password}"
