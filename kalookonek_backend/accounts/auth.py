@@ -8,6 +8,7 @@ from jwt import PyJWKClient
 from django.views.decorators.csrf import csrf_exempt
 from rest_framework.authentication import BaseAuthentication
 from rest_framework.exceptions import AuthenticationFailed
+from django.utils import timezone
 
 
 def supabase_auth_required(view_func):
@@ -100,6 +101,15 @@ def supabase_auth_required(view_func):
         request.user = django_user
         request.user_profile = profile
 
+        now = timezone.now()
+        if not django_user.last_login or (now - django_user.last_login).total_seconds() > 3600:
+            django_user.last_login = now
+            django_user.save(update_fields=['last_login'])
+            
+        if profile.status == 'archived':
+            profile.status = 'active'
+            profile.save(update_fields=['status'])
+
         # Final safeguard: Block access if the admin hasn't approved the account yet
         if not profile.is_approved:
             return JsonResponse({
@@ -184,6 +194,18 @@ class SupabaseJWTAuthentication(BaseAuthentication):
         except User.DoesNotExist:
             raise AuthenticationFailed(
                 f'No Django user found for {email}. Make sure the account exists.')
+
+        now = timezone.now()
+        if not user.last_login or (now - user.last_login).total_seconds() > 3600:
+            user.last_login = now
+            user.save(update_fields=['last_login'])
+            
+        try:
+            if hasattr(user, 'profile') and user.profile.status == 'archived':
+                user.profile.status = 'active'
+                user.profile.save(update_fields=['status'])
+        except Exception:
+            pass
 
         return (user, token)
 

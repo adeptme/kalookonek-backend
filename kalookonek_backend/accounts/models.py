@@ -9,9 +9,14 @@ class UserProfile(models.Model):
         ('staff', 'Staff'),
         ('admin', 'Admin'),
     ]
+    STATUS_CHOICES = [
+        ('active', 'Active'),
+        ('archived', 'Archived'),
+    ]
 
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='profile')
     role = models.CharField(max_length=10, choices=ROLE_CHOICES, default='patient')
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='active')
     phone_number = models.CharField(max_length=20, blank=True)
     is_approved = models.BooleanField(default=False)
     profile_picture = models.TextField(blank=True, null=True)

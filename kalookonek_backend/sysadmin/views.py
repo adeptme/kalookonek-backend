@@ -96,6 +96,7 @@ def all_users(request):
                 "name": p.user.get_full_name(),
                 "email": p.user.email,
                 "role": p.role,
+                "status": p.status,
                 "is_active": p.user.is_active,
                 "age": p.age,
                 "dob": p.dob.strftime('%m/%d/%Y') if p.dob else None,
@@ -127,6 +128,7 @@ def user_detail(request, display_id):
             "last_name": target_user.last_name,
             "email": target_user.email,
             "role": profile.role,
+            "status": profile.status,
             "phone_number": profile.phone_number,
             "is_active": target_user.is_active,
             "age": profile.age,
@@ -145,6 +147,9 @@ def user_detail(request, display_id):
 
         if 'is_active' in data:
             target_user.is_active = data['is_active']
+            
+        if 'status' in data:
+            profile.status = data['status']
 
         target_user.save()
         profile.save()
