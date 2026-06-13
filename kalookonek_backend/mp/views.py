@@ -135,6 +135,7 @@ def get_appointments(request):
         'end_time': '',  # add field if available
         'purpose': mr.diagnosis[:30] + "..." if mr.diagnosis else "Medical Consultation",
         'status': mr.status,
+        'attending_staff_name': mr.attending_staff.get_full_name() if mr.attending_staff else 'Unassigned',
     } for mr in records]
 
     return Response(data)
@@ -169,6 +170,7 @@ def get_appointment_detail(request, record_id):
         'treatment': mr.treatment,
         'prescription': mr.prescription,
         'notes': mr.notes,
+        'attending_staff_name': mr.attending_staff.get_full_name() if mr.attending_staff else 'Unassigned',
     })
 
 
@@ -241,9 +243,14 @@ def patient_history(request, patient_id):
         'spo2': mr.spo2,
         'weight': mr.weight,
         'height': mr.height,
+        'attending_staff_name': mr.attending_staff.get_full_name() if mr.attending_staff else 'Unassigned',
     } for mr in records]
 
-    return Response(data)
+    return Response({
+        'patient_name': patient.user.get_full_name(),
+        'display_id': patient.user.profile.display_id if hasattr(patient.user, 'profile') else 'N/A',
+        'records': data
+    })
 
 
 @api_view(['POST'])
@@ -282,8 +289,17 @@ def patient_directory(request):
         'user', 'user__profile').all()
 
     if search:
-        patients = patients.filter(user__first_name__icontains=search) | \
-            patients.filter(user__last_name__icontains=search)
+        from django.db.models import Q, Value
+        from django.db.models.functions import Concat
+        
+        patients = patients.annotate(
+            full_name=Concat('user__first_name', Value(' '), 'user__last_name')
+        ).filter(
+            Q(user__profile__display_id__icontains=search) |
+            Q(user__first_name__icontains=search) |
+            Q(user__last_name__icontains=search) |
+            Q(full_name__icontains=search)
+        )
     if barangay:
         patients = patients.filter(barangay__icontains=barangay)
 
@@ -300,3 +316,27 @@ def patient_directory(request):
     } for p in patients]
 
     return Response(patient_list)
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def create_walkin_consultation(request):
+    """POST — Creates an immediate walk-in consultation record for a patient."""
+    patient_id = request.data.get('patient_id')
+    if not patient_id:
+        return Response({"error": "patient_id is required."}, status=400)
+    
+    patient = get_object_or_404(PatientProfile, id=patient_id)
+    
+    # Create the record immediately
+    now = timezone.now()
+    try:
+        record = MedicalRecord.objects.create(
+            patient=patient,
+            visit_date=now.date(),
+            appointment_time=now.time(),
+            status='SCHEDULED',
+            attending_staff=request.user
+        )
+        return Response({"message": "Walk-in consultation created.", "id": record.id}, status=201)
+    except Exception as e:
+        return Response({"error": str(e)}, status=500)

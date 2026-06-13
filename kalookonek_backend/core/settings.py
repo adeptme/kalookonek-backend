@@ -120,6 +120,7 @@ DATABASES = {
             'sslmode': 'require',
         },
     }
+    
 }
 
 
@@ -168,7 +169,7 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
-        # Replace TokenAuthentication with this:
+        'rest_framework.authentication.TokenAuthentication',  # For staff Django token login
         'kalookonek_backend.accounts.auth.SupabaseJWTAuthentication',
         'rest_framework_simplejwt.authentication.JWTAuthentication',
         'rest_framework.authentication.SessionAuthentication',
