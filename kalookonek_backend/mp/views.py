@@ -55,6 +55,8 @@ def manual_lookup(request):
             'user', 'user__profile'
         ).annotate(
             full_name=Concat('user__first_name', Value(' '), 'user__last_name')
+        ).exclude(
+            user__profile__status='archived'
         ).filter(
             Q(user__profile__display_id__iexact=query) |
             Q(user__first_name__icontains=query) |
@@ -286,7 +288,7 @@ def patient_directory(request):
     barangay = request.query_params.get('barangay', '')
 
     patients = PatientProfile.objects.select_related(
-        'user', 'user__profile').all()
+        'user', 'user__profile').exclude(user__profile__status='archived')
 
     if search:
         from django.db.models import Q, Value

@@ -99,6 +99,7 @@ def user_profile(request):
             "last_name": user.last_name,
             "email": user.email,
             "role": profile.role,
+            "status": profile.status,
             "phone_number": profile.phone_number,
             "profile_picture": profile_pic_url,
         }

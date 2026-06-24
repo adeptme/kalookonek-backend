@@ -171,6 +171,7 @@ def get_profile_details(request):
         'phone_number': profile.phone_number,
         'gender': profile.gender,
         'profile_picture': profile.profile_picture,
+        'status': profile.status,
         'patient_info': patient_info,
     })
 
@@ -232,9 +233,15 @@ def login_user(request):
     if user:
         token, _ = Token.objects.get_or_create(user=user)
 
+        user.last_login = timezone.now()
+        user.save(update_fields=['last_login'])
+
         role = 'staff'
         try:
-            role = user.userprofile.role
+            role = user.profile.role
+            if user.profile.status == 'archived':
+                user.profile.status = 'active'
+                user.profile.save(update_fields=['status'])
         except Exception:
             pass
 
