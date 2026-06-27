@@ -184,19 +184,41 @@ def update_profile_info(request):
     profile = user.profile
     data = request.data
     try:
-        user.first_name = data.get('first_name', user.first_name)
-        user.last_name = data.get('last_name', user.last_name)
+        user.first_name = data.get('first_name', user.first_name) or user.first_name
+        user.last_name = data.get('last_name', user.last_name) or user.last_name
         user.save()
-        profile.phone_number = data.get('phone_number', profile.phone_number)
-        profile.gender = data.get('gender', profile.gender)
-        if 'dob' in data:
-            profile.dob = data['dob']
-        if 'profile_picture' in data:
-            profile.profile_picture = data['profile_picture']
+
+        if data.get('phone_number') is not None:
+            profile.phone_number = data['phone_number']
+        if data.get('gender') is not None:
+            profile.gender = data['gender']
+
+        # Only update dob if a non-empty value is provided
+        dob_value = data.get('dob', '').strip() if isinstance(data.get('dob'), str) else data.get('dob')
+        if dob_value:
+            try:
+                from datetime import date as date_type
+                if isinstance(dob_value, str):
+                    from datetime import datetime
+                    # Accept YYYY-MM-DD format
+                    profile.dob = datetime.strptime(dob_value, '%Y-%m-%d').date()
+                else:
+                    profile.dob = dob_value
+            except (ValueError, TypeError) as e:
+                logger.warning(f"Invalid dob format received: {dob_value!r} — {e}")
+                return Response({'error': f'Invalid date format for dob: {dob_value}'}, status=400)
+
+        # Only update profile_picture if a non-empty value is provided
+        picture_value = data.get('profile_picture', '')
+        if picture_value:
+            profile.profile_picture = picture_value
+
         profile.save()
         return Response({'message': 'Profile updated successfully'})
     except Exception as e:
+        logger.error(f"update_profile_info error: {e}", exc_info=True)
         return Response({'error': str(e)}, status=400)
+
 
 
 @api_view(['POST'])

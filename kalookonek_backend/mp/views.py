@@ -74,7 +74,7 @@ def manual_lookup(request):
         "name": p.user.get_full_name(),
         "display_id": p.user.profile.display_id,
         "blood_type": getattr(p, 'blood_type', None),
-        "age": p.user.profile.calculated_age if hasattr(p.user, 'profile') else None,
+        "age": getattr(p, 'age', None),
         "sex": getattr(p, 'sex', None),
         "barangay": getattr(p, 'barangay', None),
         "emergency_contact_name": getattr(p, 'emergency_contact_name', None),
@@ -127,16 +127,26 @@ def get_appointments(request):
     else:
         records = query.filter(status='SCHEDULED')
 
-    records = records.order_by('appointment_time')
+    if tab == "Past Records":
+        records = records.order_by('-visit_date', '-appointment_time')
+    else:
+        records = records.order_by('visit_date', 'appointment_time')
 
     data = [{
         'id': mr.id,
+        'patient_id': mr.patient.id,
         'patient_name': mr.patient.user.get_full_name(),
         'display_id': mr.patient.user.profile.display_id if hasattr(mr.patient.user, 'profile') else "N/A",
+        'visit_date': mr.visit_date.strftime('%b %d, %Y') if mr.visit_date else "N/A",
         'time': mr.appointment_time.strftime('%I:%M %p') if mr.appointment_time else "TBA",
         'end_time': '',  # add field if available
         'purpose': mr.diagnosis[:30] + "..." if mr.diagnosis else "Medical Consultation",
         'status': mr.status,
+        'age': getattr(mr.patient, 'age', None),
+        'sex': getattr(mr.patient, 'sex', None),
+        'blood_type': getattr(mr.patient, 'blood_type', None),
+        'barangay': getattr(mr.patient, 'barangay', None),
+        'allergies': getattr(mr.patient, 'allergies', None),
         'attending_staff_name': mr.attending_staff.get_full_name() if mr.attending_staff else 'Unassigned',
     } for mr in records]
 
@@ -342,3 +352,112 @@ def create_walkin_consultation(request):
         return Response({"message": "Walk-in consultation created.", "id": record.id}, status=201)
     except Exception as e:
         return Response({"error": str(e)}, status=500)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def create_patient(request):
+    """POST — Staff-only: Register a brand-new patient who has no account yet,
+    then immediately create a walk-in consultation record for them.
+    
+    Required fields: first_name, last_name, dob (YYYY-MM-DD), sex, barangay
+    Optional fields: email, blood_type, allergies, address
+    
+    Auto-generated password: {lastname_lower}{birth_year} (e.g. espiritu1994)
+    """
+    from django.contrib.auth.models import User
+    from kalookonek_backend.accounts.models import UserProfile
+    from datetime import datetime as dt
+
+    data = request.data
+    first_name = data.get('first_name', '').strip()
+    last_name = data.get('last_name', '').strip()
+    dob_raw = data.get('dob', '').strip()
+    sex = data.get('sex', '').strip()
+    barangay = data.get('barangay', '').strip()
+    email = data.get('email', '').strip()
+    blood_type = data.get('blood_type', 'unknown').strip()
+    allergies = data.get('allergies', '').strip()
+    address = data.get('address', '').strip()
+
+    # Validate required fields
+    if not first_name or not last_name or not dob_raw or not sex:
+        return Response({"error": "first_name, last_name, dob, and sex are required."}, status=400)
+
+    # Parse date of birth
+    try:
+        dob = dt.strptime(dob_raw, '%Y-%m-%d').date()
+    except ValueError:
+        return Response({"error": "dob must be in YYYY-MM-DD format."}, status=400)
+
+    # Auto-generate password: surname + birth_year (e.g. espiritu1994)
+    auto_password = f"{last_name.lower()}{dob.year}"
+
+    # Auto-generate a unique email/username if not provided
+    if not email:
+        base_username = f"{first_name.lower()}.{last_name.lower()}".replace(" ", "")
+        counter = 0
+        candidate = base_username
+        while User.objects.filter(username=candidate).exists():
+            counter += 1
+            candidate = f"{base_username}{counter}"
+        username = candidate
+        email = f"{username}@walkin.kalookonek.local"
+    else:
+        if User.objects.filter(email=email).exists():
+            return Response({"error": "An account with this email already exists."}, status=409)
+        username = email
+
+    try:
+        # 1. Create Django User
+        django_user = User.objects.create_user(
+            username=username,
+            email=email,
+            password=auto_password,
+            first_name=first_name,
+            last_name=last_name,
+        )
+
+        # 2. Create UserProfile (role=patient, auto-approved for walk-in)
+        profile = UserProfile.objects.create(
+            user=django_user,
+            role='patient',
+            is_approved=True,
+            dob=dob,
+            gender=sex,
+            barangay=barangay,
+        )
+
+        # 3. Create PatientProfile (medical details)
+        patient = PatientProfile.objects.create(
+            user=django_user,
+            date_of_birth=dob,
+            sex=sex,
+            blood_type=blood_type if blood_type else 'unknown',
+            address=address if address else 'Walk-in',
+            barangay=barangay,
+            allergies=allergies,
+        )
+
+        # 4. Immediately create a walk-in consultation record
+        now = timezone.now()
+        record = MedicalRecord.objects.create(
+            patient=patient,
+            visit_date=now.date(),
+            appointment_time=now.time(),
+            status='SCHEDULED',
+            attending_staff=request.user,
+        )
+
+        return Response({
+            "message": "Patient registered and walk-in consultation created.",
+            "patient_id": patient.id,
+            "display_id": profile.display_id,
+            "patient_name": django_user.get_full_name(),
+            "auto_password": auto_password,
+            "consultation_id": record.id,
+        }, status=201)
+
+    except Exception as e:
+        return Response({"error": str(e)}, status=500)
+

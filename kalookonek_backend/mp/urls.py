@@ -23,4 +23,5 @@ urlpatterns = [
     # --- Directory & Search ---
     path('mp/directory/', views.patient_directory, name='patient_directory'),
     path('mp/walkin/', views.create_walkin_consultation, name='walkin_consultation'),
+    path('mp/create-patient/', views.create_patient, name='create_patient'),
 ]
