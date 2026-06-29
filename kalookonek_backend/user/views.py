@@ -51,6 +51,13 @@ def dashboard(request):
                     "visit_date": r.visit_date.isoformat(),
                     "diagnosis": r.diagnosis or "General Checkup",
                     "status": r.status,
+                    "blood_pressure": r.blood_pressure,
+                    "temperature": str(r.temperature) if r.temperature else None,
+                    "weight": str(r.weight) if r.weight else None,
+                    "attending_staff": r.attending_staff.get_full_name() if r.attending_staff else None,
+                    "treatment": r.treatment,
+                    "prescription": r.prescription,
+                    "notes": r.notes,
                 }
                 for r in records_qs
             ]
@@ -127,15 +134,48 @@ def user_profile(request):
 
         return JsonResponse(data)
 
-    elif request.method in ['PUT', 'POST']: # <-- Django will now catch the file!
+    elif request.method in ['PUT', 'POST']:
+        import logging
+        logger = logging.getLogger(__name__)
+
         if request.content_type and request.content_type.startswith('multipart/form-data'):
             data = request.POST # Read the text fields
+            logger.info(f"[PROFILE UPDATE] Multipart request. POST keys: {list(data.keys())}, FILES keys: {list(request.FILES.keys())}")
             
-            # Save the image if one was uploaded
+            # Upload profile picture to Supabase Storage
             if 'profile_picture' in request.FILES:
-                profile.profile_picture = request.FILES['profile_picture']
-                # Note: We don't need 'profile = request.user.userprofile' here because we already 
-                # defined 'profile = request.user_profile' at the top of the function!
+                uploaded_file = request.FILES['profile_picture']
+                file_bytes = uploaded_file.read()
+                file_ext = uploaded_file.name.rsplit('.', 1)[-1] if '.' in uploaded_file.name else 'jpg'
+                content_type = uploaded_file.content_type or 'image/jpeg'
+                logger.info(f"[PROFILE UPDATE] File received: name={uploaded_file.name}, size={len(file_bytes)} bytes, type={content_type}")
+                
+                try:
+                    from supabase import create_client
+                    from django.conf import settings
+                    
+                    supabase_client = create_client(
+                        settings.SUPABASE_URL, settings.SUPABASE_SERVICE_ROLE_KEY)
+                    
+                    file_path = f"users/{user.id}/avatar.{file_ext}"
+                    
+                    # Upload to Supabase Storage (upsert overwrites existing)
+                    supabase_client.storage.from_("profile-pictures").upload(
+                        path=file_path,
+                        file=file_bytes,
+                        file_options={"content-type": content_type, "upsert": "true"}
+                    )
+                    
+                    # Get the public URL and save it to the TextField
+                    public_url = supabase_client.storage.from_("profile-pictures").get_public_url(file_path)
+                    profile.profile_picture = public_url
+                    logger.info(f"[PROFILE UPDATE] Upload success. URL saved: {public_url}")
+                    
+                except Exception as e:
+                    logger.error(f"[PROFILE UPDATE] Supabase Storage upload FAILED: {e}")
+                    return JsonResponse({'error': f'Image upload failed: {str(e)}'}, status=500)
+            else:
+                logger.info("[PROFILE UPDATE] No profile_picture in request.FILES — skipping image upload.")
         else:
             # If no image, handle it as normal JSON text
             try:
@@ -156,7 +196,6 @@ def user_profile(request):
             
             # If Axios/Fetch sent it as a stringified JSON (because of the image upload), parse it
             if isinstance(patient_info_data, str):
-                import json
                 try:
                     patient_info_data = json.loads(patient_info_data)
                 except json.JSONDecodeError:
@@ -177,12 +216,17 @@ def user_profile(request):
                 pass
         # --- NOTIFICATION PREFERENCES LOGIC END ---
         
-        user.save()
-        profile.save()
+        try:
+            user.save()
+            profile.save()
+        except Exception as e:
+            logger.error(f"[PROFILE UPDATE] Database save FAILED: {e}")
+            return JsonResponse({'error': f'Profile save failed: {str(e)}'}, status=400)
         
         # profile_picture is a TextField, return it directly
         new_pic_url = profile.profile_picture or None
 
+        logger.info(f"[PROFILE UPDATE] Complete. picture={new_pic_url}")
         return JsonResponse({
             "message": "Profile updated successfully.", 
             "display_id": profile.display_id,

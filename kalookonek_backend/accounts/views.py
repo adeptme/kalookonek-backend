@@ -8,9 +8,12 @@ from django.conf import settings
 from django.utils import timezone
 
 # DRF Imports
-from rest_framework.decorators import api_view, permission_classes
+from rest_framework.decorators import api_view, permission_classes, parser_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
+from rest_framework.parsers import MultiPartParser, FormParser
+
+from supabase import create_client
 
 # Local Imports
 from .auth import supabase_auth_required
@@ -179,6 +182,7 @@ def get_profile_details(request):
 
 @api_view(['PUT'])
 @permission_classes([IsAuthenticated])
+@parser_classes([MultiPartParser, FormParser])
 def update_profile_info(request):
     user = request.user
     profile = user.profile
@@ -208,10 +212,31 @@ def update_profile_info(request):
                 logger.warning(f"Invalid dob format received: {dob_value!r} — {e}")
                 return Response({'error': f'Invalid date format for dob: {dob_value}'}, status=400)
 
-        # Only update profile_picture if a non-empty value is provided
-        picture_value = data.get('profile_picture', '')
-        if picture_value:
-            profile.profile_picture = picture_value
+        profile_pic_file = request.FILES.get('profile_picture')
+        if profile_pic_file:
+            try:
+                supabase_client = create_client(settings.SUPABASE_URL, settings.SUPABASE_SERVICE_ROLE_KEY)
+                file_bytes = profile_pic_file.read()
+                file_path = f"users/{profile.supabase_uid}/avatar.jpg"
+
+                # Upload to bucket
+                supabase_client.storage.from_("profile-pictures").upload(
+                    path=file_path,
+                    file=file_bytes,
+                    file_options={"content-type": profile_pic_file.content_type, "upsert": "true"}
+                )
+
+                # Retrieve and save URL
+                public_url = supabase_client.storage.from_("profile-pictures").get_public_url(file_path)
+                profile.profile_picture = public_url
+            except Exception as e:
+                logger.error(f"Supabase upload failed: {e}")
+                return Response({'error': f'Image upload failed: {str(e)}'}, status=500)
+        else:
+            # Fallback for text URL
+            picture_value = data.get('profile_picture', '')
+            if picture_value:
+                profile.profile_picture = picture_value
 
         profile.save()
         return Response({'message': 'Profile updated successfully'})
