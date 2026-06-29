@@ -55,6 +55,7 @@ INSTALLED_APPS = [
     'kalookonek_backend.sysadmin',
     'kalookonek_backend.user',
     'kalookonek_backend.qr',
+    'anymail',
 ]
 
 MIDDLEWARE = [
@@ -193,3 +194,10 @@ SIMPLE_JWT = {
     'LEEWAY': timedelta(minutes=5),
     'JTI_CLAIM': None,
 }
+
+# --- ANYMAIL & RESEND CONFIGURATION ---
+EMAIL_BACKEND = "anymail.backends.resend.EmailBackend"
+ANYMAIL = {
+    "RESEND_API_KEY": "re_CdjwXzih_4XYXPDG1KnXnYGYjvLqjGa1i", 
+}
+DEFAULT_FROM_EMAIL = "onboarding@resend.dev"

@@ -11,7 +11,7 @@ from django.utils import timezone
 from rest_framework.decorators import api_view, permission_classes, parser_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
-from rest_framework.parsers import MultiPartParser, FormParser
+from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 
 from supabase import create_client
 
@@ -158,8 +158,9 @@ def get_profile_details(request):
             'address': patient.address,
             'barangay': patient.barangay,
             'emergency_contact_name': patient.emergency_contact_name,
-            'emergency_contact_number': patient.emergency_contact_number,
             'allergies': patient.allergies,
+            'wants_push': patient.wants_push,
+            'expo_push_token': patient.expo_push_token,
         }
     except PatientProfile.DoesNotExist:
         pass
@@ -182,7 +183,7 @@ def get_profile_details(request):
 
 @api_view(['PUT'])
 @permission_classes([IsAuthenticated])
-@parser_classes([MultiPartParser, FormParser])
+@parser_classes([MultiPartParser, FormParser, JSONParser])
 def update_profile_info(request):
     user = request.user
     profile = user.profile
@@ -211,6 +212,31 @@ def update_profile_info(request):
             except (ValueError, TypeError) as e:
                 logger.warning(f"Invalid dob format received: {dob_value!r} — {e}")
                 return Response({'error': f'Invalid date format for dob: {dob_value}'}, status=400)
+
+        # --- NOTIFICATION PREFERENCES LOGIC START ---
+        if 'patient_info' in data:
+            patient_info_data = data['patient_info']
+            
+            # If Axios/Fetch sent it as a stringified JSON (because of the image upload), parse it
+            if isinstance(patient_info_data, str):
+                try:
+                    patient_info_data = json.loads(patient_info_data)
+                except json.JSONDecodeError:
+                    patient_info_data = {}
+            
+            try:
+                from kalookonek_backend.mp.models import PatientProfile
+                patient = PatientProfile.objects.get(user=user)
+                
+                if 'wants_push' in patient_info_data:
+                    patient.wants_push = patient_info_data['wants_push']
+                if 'expo_push_token' in patient_info_data:
+                    patient.expo_push_token = patient_info_data['expo_push_token']
+                    
+                patient.save()
+            except PatientProfile.DoesNotExist:
+                pass
+        # --- NOTIFICATION PREFERENCES LOGIC END ---
 
         profile_pic_file = request.FILES.get('profile_picture')
         if profile_pic_file:

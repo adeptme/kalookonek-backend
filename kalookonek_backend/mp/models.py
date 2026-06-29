@@ -38,8 +38,7 @@ class PatientProfile(models.Model):
 
     # --- NOTIFICATION PREFERENCES ---
     wants_push = models.BooleanField(default=True)
-    wants_sms = models.BooleanField(default=True)
-    wants_email = models.BooleanField(default=False)
+    expo_push_token = models.CharField(max_length=255, blank=True, null=True)
 
     def __str__(self):
         return f"Patient: {self.user.get_full_name()}"
